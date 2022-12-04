@@ -26,7 +26,7 @@
 #endif
 
 #if HTL_GCC
-#define HTL_ATTR_PACKED [[gcc::packed]]
+#define HTL_ATTR_PACKED [[gnu::packed]]
 #elif HTL_CLANG
 #define HTL_ATTR_PACKED [[clang::packed]]
 #elif HTL_MSVC
