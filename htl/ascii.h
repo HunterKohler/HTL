@@ -3,7 +3,6 @@
 
 #include <cstdint>
 #include <htl/detail/ascii.h>
-#include <htl/utility.h>
 
 namespace htl {
 
