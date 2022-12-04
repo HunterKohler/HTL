@@ -1,7 +1,6 @@
 #include <algorithm>
 #include <gtest/gtest.h>
 #include <htl/tribool.h>
-#include "./util/allocator.h"
 
 namespace htl::test {
 
