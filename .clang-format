@@ -70,13 +70,13 @@ IfMacros: []
 IncludeBlocks: Preserve
 IncludeCategories:
     - Regex: "^<[a-zA-Z_]+>$"
-      SortPriority: 0
-    - Regex: "^<htl/.+>$"
       SortPriority: 1
+    - Regex: "^<htl/.+>$"
+      SortPriority: 3
     - Regex: "^<.+/.+>$"
       SortPriority: 2
     - Regex: ".*"
-      SortPriority: 3
+      SortPriority: 4
 IndentAccessModifiers: false
 IndentCaseBlocks: false
 IndentCaseLabels: false
