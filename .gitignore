@@ -1,0 +1,90 @@
+# System Files
+.DS_Store
+
+# Editor Files
+.vscode/
+
+# Build Directories
+bin/
+build/
+dist/
+out/
+
+# Pre-requisites
+*.d
+
+# Temporary
+temp.*
+tmp.*
+tmp
+
+# Objects
+*.o
+*.ko
+*.obj
+*.elf
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Static Libs
+*.lib
+*.a
+
+# Shared Libs
+*.dll
+*.so
+*.so.*
+*.dylib
+
+# Binaries
+*.exe
+*.out
+
+# Debug Info
+*.dSYM/
+*.su
+
+# Build Caches
+__pycache__/
+*.pyc
+*.tsbuildinfo
+
+# Coverage
+.coverage
+.lcov.info
+clover.xml
+coverage/
+lcov-report/
+*.lcov
+*.gcno
+*.gcda
+*.gcov
+*.info
+
+# Environment
+.env
+.*.env
+.env.*
+*.env
+env/
+venv/
+
+# Logs
+*.log
+*.pid
+
+# NPM
+node_modules/
+package-lock.json
+
+# Generated Source
+*.tab.c
+*.yy.c
+
+# Latex
+*.aux
+*.fls
+*.synctex.gz
+*.fdb_latexmk
