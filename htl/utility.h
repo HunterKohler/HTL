@@ -20,7 +20,7 @@ constexpr std::underlying_type_t<E> to_underlying(E e) noexcept
 {
 #if HTL_HAS_BUILTIN(__builtin_unreachable)
     __builtin_unreachable();
-#elif HLIB_MSVC
+#elif HTL_MSVC
     __assume(false);
 #else
     std::abort();
