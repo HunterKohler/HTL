@@ -1,9 +1,11 @@
 SHELL = bash
+OS = $(shell uname)
 
 GCOV ?= gcov
 LCOV ?= lcov
 CMAKE ?= cmake
 GENHTML ?= genhtml
+OPEN ?= $(if OS == "Darwin",open,xdg-open)
 
 GTEST_LIB = ./build/lib/libgtest.a
 GMOCK_LIB = ./build/lib/libgmock.a
@@ -19,7 +21,8 @@ GTEST = $(GTEST_LIB) \
 	$(GMOCK_INCLUDE)
 
 LIB = ./build/lib/libhtl.a
-LIB_SRC = $(shell find htl -type f -name '*.cpp')
+LIB_INC = $(shell find htl -type f -name '*.h')
+LIB_SRC = $(sort $(shell find htl -type f -name '*.cpp') htl/htl.cpp)
 LIB_OBJ = $(patsubst %.cpp,build/obj/%.o,$(LIB_SRC))
 TEST_SRC = $(shell find test/htl -type f -name '*.cpp')
 TEST_OBJ = $(patsubst %.cpp,build/obj/%.o,$(TEST_SRC))
@@ -63,13 +66,25 @@ lib: $(LIB)
 
 test: $(TEST_BIN)
 	$< --gtest_brief
-	mkdir -p ./build/coverage
-	$(RM) -r ./build/coverage/test.info ./build/coverage/test
-	$(LCOV) --quiet --capture --gcov-tool $(GCOV) --directory ./htl \
-		--directory ./build/obj/htl --output-file ./build/coverage/test.info \
-		--no-external --config-file ./.lcovrc
-	$(GENHTML) --quiet --output-directory ./build/coverage/test  \
-		./build/coverage/test.info --config-file ./.lcovrc
+	@ mkdir -p ./build/coverage
+	@ $(RM) -r ./build/coverage/test.info ./build/coverage/test
+	@ $(LCOV) --quiet \
+		--capture \
+		--gcov-tool $(GCOV) \
+		--directory ./htl \
+		--directory ./build/obj/htl \
+		--directory ./build/obj/test \
+		--output-file ./build/coverage/test.info \
+		--no-external \
+		--config-file ./.lcovrc
+	@ $(GENHTML) \
+		--quiet \
+		--config-file ./.lcovrc \
+		--output-directory ./build/coverage/test  \
+		./build/coverage/test.info
+
+coverage: | test
+	$(OPEN) ./build/coverage/test/index.html
 
 docs:
 	doxygen .
@@ -77,7 +92,14 @@ docs:
 deps: $(GTEST)
 
 clean:
-	$(RM) -r ./build/{include,lib,bin,obj,coverage}
+	$(RM) -r ./build
+
+htl/htl.cpp: $(LIB_INC)
+	@echo -n > $@; \
+	for path in $(LIB_INC) ; do \
+		echo "#include <$${path}>" >> $@; \
+	done; \
+	clang-format -i $@
 
 $(GTEST) &:
 	if [[ ! -d build/gtest ]] ; then \
