@@ -220,6 +220,12 @@ public:
         return _value;
     }
 
+    template <class... Args>
+    void *operator new(std::size_t, Args &&...args) = delete;
+
+    template <class... Args>
+    void operator delete(void *, Args &&...args) = delete;
+
 private:
     bool _active;
     int _value;
