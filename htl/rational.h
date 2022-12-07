@@ -1,8 +1,10 @@
 #ifndef HTL_RATIONAL_H_
 #define HTL_RATIONAL_H_
 
+#include <charconv>
 #include <concepts>
 #include <cstddef>
+#include <limits>
 #include <numeric>
 #include <htl/concepts.h>
 #include <htl/detail/default_hash.h>
@@ -14,21 +16,22 @@ class Rational {
 public:
     using value_type = T;
 
-    constexpr Rational() noexcept = default;
+    constexpr Rational() noexcept : _numer(), _denom(1) {}
 
-    constexpr Rational(T numer) noexcept : _numer(num), _denom(1) {}
+    constexpr Rational(T numer) noexcept : _numer(numer), _denom(1) {}
 
-    constexpr Rational(T numer, T denom) noexcept : _numer(num), _denom(d) {}
+    constexpr Rational(T numer, T denom) noexcept : _numer(numer), _denom(denom)
+    {}
 
     template <class U>
     constexpr Rational(Rational<U> other)
-        : _numer(other._numer), _denom(other._denom)
+        : _numer(other.numer()), _denom(other.denom())
     {}
 
     template <class U>
     constexpr Rational &operator=(Rational<U> other) noexcept
     {
-        assign(other._numer, other._denom);
+        assign(other.numer(), other.denom());
         return *this;
     }
 
@@ -66,21 +69,32 @@ public:
 
     constexpr Rational normalize() const noexcept
     {
+        auto new_numer = _numer;
+        auto new_denom = _denom;
+
         if constexpr (std::signed_integral<T>) {
-            if (new_denom < 0) {
-                _numer = -_numer;
-                _denom = -_denom;
+            if (_denom < 0) {
+                new_numer = -new_numer;
+                new_denom = -new_denom;
             }
         }
 
-        auto mult = std::gcd(_numer, _denom);
-        _numer /= mult;
-        _denom /= mult;
+        auto mult = std::gcd(new_numer, new_denom);
+
+        new_numer /= mult;
+        new_denom /= mult;
+
+        return { new_numer, new_denom };
     }
 
     constexpr Rational invert() const noexcept
     {
         return { _denom, _numer };
+    }
+
+    constexpr Rational abs() const noexcept
+    {
+        return { std::abs(numer()), std::abs(denom()) };
     }
 
     explicit operator bool() const noexcept
@@ -117,32 +131,32 @@ public:
     template <class U>
     constexpr Rational &operator+=(Rational<U> other) noexcept
     {
-        _numer += other._numer * _denom;
-        _denom *= other._denom;
+        _numer = _numer * other.denom() + other.numer() * _denom;
+        _denom *= other.denom();
         return *this;
     }
 
     template <class U>
     constexpr Rational &operator-=(Rational<U> other) noexcept
     {
-        _numer -= other._numer * _denom;
-        _denom *= other._denom;
+        _numer = _numer * other.denom() - other.numer() * _denom;
+        _denom *= other.denom();
         return *this;
     }
 
     template <class U>
     constexpr Rational &operator*=(Rational<U> other) noexcept
     {
-        _numer *= other._numer;
-        _denom *= other._denom;
+        _numer *= other.numer();
+        _denom *= other.denom();
         return *this;
     }
 
     template <class U>
     constexpr Rational &operator/=(Rational<U> other) noexcept
     {
-        _numer *= other._denom;
-        _denom *= other._numer;
+        _numer *= other.denom();
+        _denom *= other.numer();
         return *this;
     }
 
@@ -174,12 +188,6 @@ private:
     T _numer;
     T _denom;
 };
-
-template <class T>
-constexpr Rational<T> abs(Rational<T> &value) noexcept
-{
-    return { std::abs(value.numer()), std::abs(value.denom()) };
-}
 
 template <class T>
 constexpr Rational<T> operator+(Rational<T> value) noexcept
@@ -260,13 +268,13 @@ constexpr Rational<T> operator*(T a, Rational<T> b) noexcept
 }
 
 template <class T>
-constexpr Rational<T> operator/(Rational<T> a, T b) noexcept
+constexpr Rational<T> operator/(T a, Rational<T> b) noexcept
 {
     return { a * b.denom(), b.numer() };
 }
 
-template <class T>
-constexpr bool operator==(Rational<T> a, Rational<T> b) noexcept
+template <class T, class U>
+constexpr bool operator==(Rational<T> a, Rational<U> b) noexcept
 {
     return (a.numer() * b.denom()) == (a.denom() * b.numer());
 }
@@ -277,17 +285,39 @@ constexpr bool operator==(Rational<T> a, T b)
     return a.numer() == (a.denom() * b);
 }
 
-template <class T>
+template <class T, class U>
 constexpr std::strong_ordering
-operator<=>(Rational<T> a, Rational<T> b) noexcept
+operator<=>(Rational<T> a, Rational<U> b) noexcept
 {
+    a = a.normalize();
+    b = b.normalize();
     return (a.numer() * b.denom()) <=> (a.denom() * b.numer());
 }
 
 template <class T>
 constexpr std::strong_ordering operator<=>(Rational<T> a, T b) noexcept
 {
+    a = a.normalize();
     return a.numer() <=> (a.denom() * b);
+}
+
+template <class T, std::output_iterator<char> O>
+constexpr O to_chars(const Rational<T> &value, O out)
+{
+    char buf[2 * std::numeric_limits<T>::digits10 + 5];
+    auto res = std::to_chars(buf, std::end(buf), value.numer());
+    *res.ptr++ = '/';
+    res = std::to_chars(res.ptr, std::end(buf), value.denom());
+    return std::copy(buf, res.ptr, std::move(out));
+}
+
+template <class T, class Alloc = std::allocator<char>>
+constexpr std::basic_string<char, std::char_traits<char>, Alloc>
+to_string(const Rational<T> &value, const Alloc &alloc = Alloc())
+{
+    std::basic_string<char, std::char_traits<char>, Alloc> res(alloc);
+    to_chars(value, std::back_inserter(res));
+    return res;
 }
 
 template <class CharT, class Traits, class T>
@@ -301,11 +331,10 @@ template <class CharT, class Traits, class T>
 constexpr std::basic_istream<CharT, Traits> &
 operator>>(std::basic_istream<CharT, Traits> &is, Rational<T> &value)
 {
-    char c;
     int n, d = 1;
 
     is >> n;
-    if (is.peek() == CharT('/')) {
+    if (Traits::eq(CharT('/'), Traits::to_char_type(is.peek()))) {
         is.ignore();
         is >> d;
         if (!d) {
@@ -314,7 +343,7 @@ operator>>(std::basic_istream<CharT, Traits> &is, Rational<T> &value)
     }
 
     if (is) {
-        value.assign(n, 1);
+        value.assign(n, d);
     }
 
     return is;
