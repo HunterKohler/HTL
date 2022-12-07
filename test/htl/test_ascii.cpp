@@ -1,6 +1,6 @@
 #include <ranges>
-#include <htl/ascii.h>
 #include <gtest/gtest.h>
+#include <htl/ascii.h>
 
 namespace htl::test {
 
