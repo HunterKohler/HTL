@@ -17,6 +17,7 @@
 #include <htl/md2.h>
 #include <htl/md4.h>
 #include <htl/md5.h>
+#include <htl/rational.h>
 #include <htl/scope_guard.h>
 #include <htl/siphash.h>
 #include <htl/tribool.h>
