@@ -11,13 +11,6 @@ TEST(TriBoolTest, DefaultConstructor)
     ASSERT_NE(TriBool(), true);
 }
 
-TEST(TriBoolTest, NullConstructor)
-{
-    ASSERT_TRUE(TriBool(nullptr) == nullptr);
-    ASSERT_NE(TriBool(nullptr), false);
-    ASSERT_NE(TriBool(nullptr), true);
-}
-
 TEST(TriBoolTest, BoolConstructor)
 {
     ASSERT_NE(TriBool(false), nullptr);
