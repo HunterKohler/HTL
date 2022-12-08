@@ -144,13 +144,9 @@ public:
 
     bool is_nil() const noexcept
     {
-        for (auto value: _bytes) {
-            if (value != std::byte()) {
-                return false;
-            }
-        }
-
-        return true;
+        return std::ranges::all_of(_bytes, [](auto value) {
+            return value == std::byte();
+        });
     }
 
     explicit operator bool() const noexcept
