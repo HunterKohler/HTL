@@ -32,6 +32,16 @@ public:
 
     friend constexpr bool operator==(TriBool, TriBool) noexcept = default;
 
+    friend constexpr bool operator==(TriBool a, bool b) noexcept
+    {
+        return a._state == State(b + 1);
+    }
+
+    friend constexpr bool operator==(TriBool a, std::nullptr_t) noexcept
+    {
+        return a._state == State::Null;
+    }
+
     friend constexpr std::strong_ordering operator<=>(TriBool, TriBool) //
         noexcept = default;
 
