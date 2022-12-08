@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <iostream>
 #include <string_view>
 
 namespace htl {
@@ -73,7 +74,7 @@ public:
             std::size_t buffer_rem = block_size - buffer_size;
             std::uint8_t *buffer_end = _buffer + buffer_size;
 
-            if (buffer_rem < size) {
+            if (buffer_rem > size) {
                 std::ranges::copy_n(data, size, buffer_end);
                 return;
             }

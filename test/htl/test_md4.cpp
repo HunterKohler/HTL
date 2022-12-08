@@ -1,12 +1,15 @@
+#include <algorithm>
 #include <gtest/gtest.h>
 #include <htl/md4.h>
 
 namespace htl::test {
 
-using ByteVector = std::vector<std::uint8_t>;
-using ByteVectorPair = std::pair<ByteVector, ByteVector>;
+struct MD4TestData {
+    std::vector<std::uint8_t> message;
+    std::vector<std::uint8_t> digest;
+};
 
-const std::vector<ByteVectorPair> md4_test_data{
+const std::vector<MD4TestData> md4_test_data{
     {
         {},
         { 0x31, 0xD6, 0xCF, 0xE0, 0xD1, 0x6A, 0xE9, 0x31, 0xB7, 0x3C, 0x59,
@@ -61,12 +64,30 @@ const std::vector<ByteVectorPair> md4_test_data{
 
 TEST(MD4Test, Hash)
 {
-    ByteVector out(MD4::digest_size);
+    std::vector<std::uint8_t> out(MD4::digest_size);
 
     for (auto &[message, digest]: md4_test_data) {
         MD4::hash(message.data(), message.size(), out.data());
 
         ASSERT_EQ(out, digest);
+    }
+
+    MD4 context;
+
+    for (auto &[message, digest]: md4_test_data) {
+        for (std::size_t width = 1; width <= message.size(); ++width) {
+            context.reset();
+
+            for (std::size_t start = 0; start < message.size();
+                 start += width) {
+                auto size = std::min(width, message.size() - start);
+                context.update(message.data() + start, size);
+            }
+
+            context.finalize(out.data());
+
+            ASSERT_EQ(out, digest);
+        }
     }
 }
 

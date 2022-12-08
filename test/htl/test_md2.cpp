@@ -1,12 +1,15 @@
+#include <algorithm>
 #include <gtest/gtest.h>
 #include <htl/md2.h>
 
 namespace htl::test {
 
-using ByteVector = std::vector<std::uint8_t>;
-using ByteVectorPair = std::pair<ByteVector, ByteVector>;
+struct MD2TestData {
+    std::vector<std::uint8_t> message;
+    std::vector<std::uint8_t> digest;
+};
 
-const std::vector<ByteVectorPair> md2_test_data{
+const std::vector<MD2TestData> md2_test_data{
     {
         {},
         { 0x83, 0x50, 0xE5, 0xA3, 0xE2, 0x4C, 0x15, 0x3D, 0xF2, 0x27, 0x5C,
@@ -61,12 +64,30 @@ const std::vector<ByteVectorPair> md2_test_data{
 
 TEST(MD2Test, Hash)
 {
-    ByteVector out(MD2::digest_size);
+    std::vector<std::uint8_t> out(MD2::digest_size);
 
     for (auto &[message, digest]: md2_test_data) {
         MD2::hash(message.data(), message.size(), out.data());
 
         ASSERT_EQ(out, digest);
+    }
+
+    MD2 context;
+
+    for (auto &[message, digest]: md2_test_data) {
+        for (std::size_t width = 1; width <= message.size(); ++width) {
+            context.reset();
+
+            for (std::size_t start = 0; start < message.size();
+                 start += width) {
+                auto size = std::min(width, message.size() - start);
+                context.update(message.data() + start, size);
+            }
+
+            context.finalize(out.data());
+
+            ASSERT_EQ(out, digest);
+        }
     }
 }
 

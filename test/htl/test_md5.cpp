@@ -1,12 +1,15 @@
+#include <algorithm>
 #include <gtest/gtest.h>
 #include <htl/md5.h>
 
 namespace htl::test {
 
-using ByteVector = std::vector<std::uint8_t>;
-using ByteVectorPair = std::pair<ByteVector, ByteVector>;
+struct MD5TestData {
+    std::vector<std::uint8_t> message;
+    std::vector<std::uint8_t> digest;
+};
 
-const std::vector<ByteVectorPair> md5_test_data{
+const std::vector<MD5TestData> md5_test_data{
     {
         {},
         { 0xD4, 0x1D, 0x8C, 0xD9, 0x8F, 0x00, 0xB2, 0x04, 0xE9, 0x80, 0x09,
@@ -61,12 +64,30 @@ const std::vector<ByteVectorPair> md5_test_data{
 
 TEST(MD5Test, Hash)
 {
-    ByteVector out(MD5::digest_size);
+    std::vector<std::uint8_t> out(MD5::digest_size);
 
     for (auto &[message, digest]: md5_test_data) {
         MD5::hash(message.data(), message.size(), out.data());
 
         ASSERT_EQ(out, digest);
+    }
+
+    MD5 context;
+
+    for (auto &[message, digest]: md5_test_data) {
+        for (std::size_t width = 1; width <= message.size(); ++width) {
+            context.reset();
+
+            for (std::size_t start = 0; start < message.size();
+                 start += width) {
+                auto size = std::min(width, message.size() - start);
+                context.update(message.data() + start, size);
+            }
+
+            context.finalize(out.data());
+
+            ASSERT_EQ(out, digest);
+        }
     }
 }
 
