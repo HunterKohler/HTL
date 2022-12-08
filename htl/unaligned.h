@@ -51,7 +51,7 @@ constexpr void store_unaligned(U *p, T value) noexcept
         value = detail::byteswap_if<std::endian::little != E>(value);
 
         for (int i = 0; i < sizeof(T); i++) {
-            p[i] = (value >> (8 * i)) & 0xFF;
+            p[i] = U((value >> (8 * i)) & T(0xFF));
         }
     } else {
         reinterpret_cast<detail::PackedStorage<T> *>(p)->value =

@@ -9,6 +9,7 @@
 #include <htl/detail/compare.h>
 #include <htl/detail/concepts.h>
 #include <htl/detail/default_hash.h>
+#include <htl/detail/encoding.h>
 #include <htl/detail/md4_state.h>
 #include <htl/detail/md5_state.h>
 #include <htl/detail/mdx_hash.h>
@@ -24,3 +25,4 @@
 #include <htl/type_traits.h>
 #include <htl/unaligned.h>
 #include <htl/utility.h>
+#include <htl/uuid.h>
