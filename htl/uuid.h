@@ -1,9 +1,7 @@
 #ifndef HTL_UUID_H_
 #define HTL_UUID_H_
 
-#include <algorithm>
 #include <array>
-#include <charconv>
 #include <cstddef>
 #include <functional>
 #include <iosfwd>
@@ -21,7 +19,7 @@
 
 namespace htl {
 
-enum class UUIDVersion {
+enum class UUIDVersion : unsigned char {
     Unknown,
     v1,
     v2,
@@ -29,7 +27,8 @@ enum class UUIDVersion {
     v4,
     v5,
 };
-enum class UUIDVariant {
+
+enum class UUIDVariant : unsigned char {
     Unknown,
     NCS,
     RFC,
@@ -37,13 +36,83 @@ enum class UUIDVariant {
     Future,
 };
 
+namespace detail {
+
+inline auto uuid_version_from_num(std::byte value) noexcept
+{
+    switch (to_underlying(value)) {
+    case 1:
+        return UUIDVersion::v1;
+    case 2:
+        return UUIDVersion::v2;
+    case 3:
+        return UUIDVersion::v3;
+    case 4:
+        return UUIDVersion::v4;
+    case 5:
+        return UUIDVersion::v5;
+    default:
+        return UUIDVersion::Unknown;
+    }
+}
+
+inline auto uuid_version_to_num(UUIDVersion value) noexcept
+{
+    return std::byte(to_underlying(value));
+}
+
+inline auto uuid_variant_from_num(std::byte value) noexcept
+{
+    switch (to_underlying(value)) {
+    case 0:
+    case 1:
+    case 2:
+    case 3:
+    case 4:
+    case 5:
+    case 6:
+    case 7:
+        return UUIDVariant::NCS;
+    case 8:
+    case 9:
+    case 10:
+    case 11:
+        return UUIDVariant::RFC;
+    case 12:
+    case 13:
+        return UUIDVariant::Microsoft;
+    case 14:
+        return UUIDVariant::Future;
+    default:
+        return UUIDVariant::Unknown;
+    }
+}
+
+inline auto uuid_variant_to_num(UUIDVariant value) noexcept
+{
+    switch (value) {
+    case UUIDVariant::NCS:
+        return std::byte();
+    case UUIDVariant::RFC:
+        return std::byte(8);
+    case UUIDVariant::Microsoft:
+        return std::byte(12);
+    case UUIDVariant::Future:
+        return std::byte(14);
+    default:
+        return std::byte(15);
+    }
+}
+
+} // namespace detail
+
 class UUID {
 public:
     struct bytes_type : std::array<std::byte, 16> {
         constexpr bytes_type() noexcept = default;
 
         template <class... Args>
-        constexpr explicit bytes_type(Args &&...args)
+        constexpr bytes_type(Args &&...args)
             : std::array<std::byte, 16>{ static_cast<std::byte>(
                   std::forward<Args>(args))... }
         {}
@@ -62,56 +131,25 @@ public:
 
     UUIDVersion version() const noexcept
     {
-        std::uint8_t value = to_underlying(_bytes[6]) >> 4;
-        switch (value) {
-        case 1:
-            return UUIDVersion::v1;
-        case 2:
-            return UUIDVersion::v2;
-        case 3:
-            return UUIDVersion::v3;
-        case 4:
-            return UUIDVersion::v4;
-        case 5:
-            return UUIDVersion::v5;
-        default:
-            return UUIDVersion::Unknown;
-        }
+        std::byte value = _bytes[6] >> 4;
+        return detail::uuid_version_from_num(value);
     }
 
     UUIDVariant variant() const noexcept
     {
-        std::uint8_t value = to_underlying(_bytes[8]) >> 4;
-        switch (value) {
-        case 0:
-        case 1:
-        case 2:
-        case 3:
-        case 4:
-        case 5:
-        case 6:
-        case 7:
-            return UUIDVariant::NCS;
-        case 8:
-        case 9:
-        case 10:
-        case 11:
-            return UUIDVariant::RFC;
-        case 12:
-        case 13:
-            return UUIDVariant::Microsoft;
-        case 14:
-            return UUIDVariant::Future;
-        default:
-            return UUIDVariant::Unknown;
-        }
+        std::byte value = _bytes[8] >> 4;
+        return detail::uuid_variant_from_num(value);
     }
 
     bool is_nil() const noexcept
     {
-        return std::ranges::all_of(_bytes, [](auto v) {
-            return v == std::byte();
-        });
+        for (auto value: _bytes) {
+            if (value != std::byte()) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     explicit operator bool() const noexcept
@@ -176,14 +214,32 @@ inline UUID make_uuid(std::string_view str)
     return value;
 }
 
-template <class G>
-    requires std::uniform_random_bit_generator<std::remove_reference_t<G>>
-inline UUID make_uuid(G &&g)
+namespace detail {
+
+inline void set_uuid_bytes_version(auto &bytes, UUIDVersion new_version)
+{
+    bytes[6] =
+        (uuid_version_to_num(new_version) << 4) | (bytes[6] & std::byte(15));
+}
+
+inline void set_uuid_bytes_variant(auto &bytes, UUIDVariant new_variant)
+{
+    bytes[8] =
+        (uuid_variant_to_num(new_variant) << 4) | (bytes[8] & std::byte(15));
+}
+
+} // namespace detail
+
+template <class Gen>
+    requires std::uniform_random_bit_generator<std::remove_reference_t<Gen>>
+inline UUID make_uuid(Gen &&g, UUIDVariant variant = UUIDVariant::RFC)
 {
     UUID::bytes_type bytes;
     std::uniform_int_distribution<std::uint64_t> dist;
     store_unaligned_ne64(bytes.data(), dist(g));
     store_unaligned_ne64(bytes.data() + 8, dist(g));
+    detail::set_uuid_bytes_variant(bytes, variant);
+    detail::set_uuid_bytes_version(bytes, UUIDVersion::v4);
     return { bytes };
 }
 
@@ -252,7 +308,7 @@ operator<<(std::basic_ostream<CharT, Traits> &stream, const UUID &value)
 
 template <class CharT, class Traits>
 inline std::basic_istream<CharT, Traits> &
-operator>>(std::basic_istream<CharT, Traits> &stream, const UUID &value)
+operator>>(std::basic_istream<CharT, Traits> &stream, UUID &value)
 {
     char buf[37];
 
