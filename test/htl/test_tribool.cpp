@@ -13,7 +13,7 @@ TEST(TriBoolTest, DefaultConstructor)
 
 TEST(TriBoolTest, NullConstructor)
 {
-    ASSERT_EQ(TriBool(nullptr), nullptr);
+    ASSERT_TRUE(TriBool(nullptr) == nullptr);
     ASSERT_NE(TriBool(nullptr), false);
     ASSERT_NE(TriBool(nullptr), true);
 }
