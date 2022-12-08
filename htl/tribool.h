@@ -55,14 +55,6 @@ private:
     State _state;
 };
 
-template <class CharT, class Traits>
-constexpr std::basic_ostream<CharT, Traits> &
-operator<<(std::basic_ostream<CharT, Traits> &os, TriBool value)
-{
-    os << (value ? "true" : !value ? "false" : "null");
-    return os;
-}
-
 } // namespace htl
 
 #endif

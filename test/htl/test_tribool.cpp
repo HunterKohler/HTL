@@ -29,13 +29,6 @@ TEST(TriBoolTest, NegateOperator)
     ASSERT_FALSE(!TriBool(true));
 }
 
-TEST(TriBoolTest, OutputStream)
-{
-    ASSERT_EQ((std::stringstream() << TriBool(nullptr)).str(), "null");
-    ASSERT_EQ((std::stringstream() << TriBool(false)).str(), "false");
-    ASSERT_EQ((std::stringstream() << TriBool(true)).str(), "true");
-}
-
 TEST(TriBoolTest, Ordering)
 {
     std::array<TriBool, 3> unordered{ true, false, nullptr },
