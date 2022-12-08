@@ -84,18 +84,18 @@ test: $(TEST_BIN)
 		./build/coverage/test.info
 
 coverage: | test
-	$(OPEN) ./build/coverage/test/index.html
+	@ $(OPEN) ./build/coverage/test/index.html
 
 docs:
-	doxygen .
+	@ doxygen .
 
 deps: $(GTEST)
 
 clean:
-	$(RM) -r ./build
+	@ $(RM) -r ./build
 
 htl/htl.cpp: $(LIB_INC)
-	@echo -n > $@; \
+	@ echo -n > $@; \
 	for path in $(LIB_INC) ; do \
 		echo "#include <$${path}>" >> $@; \
 	done; \
@@ -105,20 +105,20 @@ $(GTEST) &:
 	if [[ ! -d build/gtest ]] ; then \
 		git clone git@github.com:google/googletest.git build/gtest; \
 	fi
-	mkdir -p build/gtest/build
+	@ mkdir -p build/gtest/build
 	$(CMAKE) -B build/gtest/build build/gtest
 	$(MAKE) -C build/gtest/build
-	mkdir -p build/lib build/include
-	cp build/gtest/build/lib/*.a build/lib
-	cp -r build/gtest/googletest/include/gtest build/include/
-	cp -r build/gtest/googlemock/include/gmock build/include/
+	@ mkdir -p build/lib build/include
+	@ cp build/gtest/build/lib/*.a build/lib
+	@ cp -r build/gtest/googletest/include/gtest build/include/
+	@ cp -r build/gtest/googlemock/include/gmock build/include/
 
 %.o:
-	mkdir -p $(@D)
+	@ mkdir -p $(@D)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $<
 
 %.a:
-	mkdir -p $(@D)
+	@ mkdir -p $(@D)
 	$(AR) rcs $@ $^
 
 $(LIB): $(LIB_OBJ)
@@ -127,7 +127,7 @@ $(TEST_OBJ) : build/obj/%.o : %.cpp
 $(TEST_OBJ) : $(GTEST_INCLUDE) $(GMOCK_INCLUDE)
 
 $(TEST_BIN): $(LIB_OBJ) $(TEST_OBJ) $(GTEST_LIB) $(GTEST_MAIN_LIB)
-	mkdir -p $(@D)
+	@mkdir -p $(@D)
 	$(CXX) $(LDFLAGS) $(LDLIBS) -o $@ $^
 
 -include $(shell find build -name \*.d 2>/dev/null)
