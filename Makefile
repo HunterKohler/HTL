@@ -66,7 +66,7 @@ all: $(LIB) $(TEST_BIN)
 lib: $(LIB)
 
 test: $(TEST_BIN)
-	$< --gtest_brief
+	$<
 	@ mkdir -p ./build/coverage
 	@ $(RM) -r ./build/coverage/test.info ./build/coverage/test
 	@ $(LCOV) --quiet \
@@ -127,7 +127,7 @@ $(LIB_OBJ) : build/obj/%.o : %.cpp
 $(TEST_OBJ) : build/obj/%.o : %.cpp
 $(TEST_OBJ) : $(GTEST_INCLUDE) $(GMOCK_INCLUDE)
 
-$(TEST_BIN): $(LIB_OBJ) $(TEST_OBJ) $(GTEST_LIB) $(GTEST_MAIN_LIB)
+$(TEST_BIN): $(LIB_OBJ) $(TEST_OBJ) $(GTEST_LIB)
 	@mkdir -p $(@D)
 	$(CXX) $(LDFLAGS) $(LDLIBS) -o $@ $^
 

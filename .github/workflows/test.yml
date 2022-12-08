@@ -14,6 +14,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
       - name: Build
-        run: make all
+        run: make all -j4
       - name: Test
         run: ./build/bin/test
