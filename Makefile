@@ -7,6 +7,7 @@ CMAKE ?= cmake
 GENHTML ?= genhtml
 OPEN ?= $(if OS == "Darwin",open,xdg-open)
 
+GTEST_REPO = https://github.com/google/googletest.git
 GTEST_LIB = ./build/lib/libgtest.a
 GMOCK_LIB = ./build/lib/libgmock.a
 GTEST_MAIN_LIB = ./build/lib/libgtest_main.a
@@ -103,7 +104,7 @@ htl/htl.cpp: $(LIB_INC)
 
 $(GTEST) &:
 	if [[ ! -d build/gtest ]] ; then \
-		git clone git@github.com:google/googletest.git build/gtest; \
+		git clone $(GTEST_REPO) build/gtest; \
 	fi
 	@ mkdir -p build/gtest/build
 	$(CMAKE) -B build/gtest/build build/gtest
