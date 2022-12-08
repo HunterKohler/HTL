@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <functional>
 #include <iosfwd>
+#include <iostream>
 #include <iterator>
 #include <memory>
 #include <random>
@@ -310,16 +311,37 @@ template <class CharT, class Traits>
 inline std::basic_istream<CharT, Traits> &
 operator>>(std::basic_istream<CharT, Traits> &stream, UUID &value)
 {
-    char buf[37];
+    if (!stream) {
+        return stream;
+    }
 
-    if (stream && stream >> buf) {
-        std::error_code err;
-        auto new_value = make_uuid(std::string_view(buf, 36), err);
-        if (err) {
-            stream.setstate(std::ios::failbit);
+    char buf[37];
+    bool microsoft =
+        Traits::eq(Traits::to_char_type(stream.peek()), CharT('{'));
+
+    if (microsoft) {
+        stream.ignore();
+    }
+
+    if (!(stream >> buf)) {
+        return stream;
+    }
+
+    std::error_code err;
+    auto new_value = make_uuid(std::string_view(buf, 36), err);
+
+    if (microsoft) {
+        if (Traits::eq(Traits::to_char_type(stream.peek()), CharT('}'))) {
+            stream.ignore();
         } else {
-            value = new_value;
+            err = std::make_error_code(std::errc::invalid_argument);
         }
+    }
+
+    if (err) {
+        stream.setstate(std::ios::failbit);
+    } else {
+        value = new_value;
     }
 
     return stream;

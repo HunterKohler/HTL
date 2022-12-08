@@ -1,4 +1,3 @@
-#include <algorithm>
 #include <cstddef>
 #include <set>
 #include <sstream>
@@ -67,6 +66,25 @@ const std::vector<UUIDTestData> uuid_test_data{
     }
 };
 
+const std::vector<std::string_view> uuid_invalid_strings{
+    "",
+    "x",
+    "xxxxxxxx",
+    "xxxxxxxx-xxxx",
+    "xxxxxxxx-xxxx-xxxx",
+    "xxxxxxxx-xxxx-xxxx-xxxx",
+    "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+    "123e4567",
+    "123e4567-e89b",
+    "123e4567-e89b-52d3",
+    "123e4567-e89b-52d3-f456",
+    "123e4567xe89b-02d3-f456-426614174000",
+    "123e4567-e89bx02d3-f456-426614174000",
+    "123e4567-e89b-02d3xf456-426614174000",
+    "123e4567-e89b-02d3-f456x426614174000",
+    "{123e4567-e89b-02d3-f456-426614174000",
+};
+
 TEST(UUIDTest, DefaultConstruct)
 {
     UUID::bytes_type full;
@@ -128,13 +146,44 @@ TEST(UUIDTest, Variant)
 
 TEST(UUIDTest, MakeUUIDFromString)
 {
-    std::error_code err;
-
     for (auto &data: uuid_test_data) {
+        std::error_code err;
         auto value = make_uuid(data.string, err);
 
         ASSERT_FALSE(err);
         ASSERT_EQ(value.to_bytes(), data.bytes);
+    }
+
+    for (auto &data: uuid_test_data) {
+        auto value = make_uuid(data.string);
+
+        ASSERT_EQ(value.to_bytes(), data.bytes);
+    }
+
+    for (auto &data: uuid_test_data) {
+        std::error_code err;
+        auto string = "{" + std::string(data.string) + "}";
+        auto value = make_uuid(string, err);
+
+        ASSERT_FALSE(err);
+        ASSERT_EQ(value.to_bytes(), data.bytes);
+    }
+
+    for (auto &data: uuid_test_data) {
+        auto string = "{" + std::string(data.string) + "}";
+        auto value = make_uuid(string);
+
+        ASSERT_EQ(value.to_bytes(), data.bytes);
+    }
+
+    for (auto &string: uuid_invalid_strings) {
+        std::error_code err;
+        make_uuid(string, err);
+        ASSERT_EQ(err, std::make_error_code(std::errc::invalid_argument));
+    }
+
+    for (auto &string: uuid_invalid_strings) {
+        ASSERT_THROW(make_uuid(string), std::invalid_argument);
     }
 }
 
@@ -206,9 +255,31 @@ TEST(UUIDTest, IStreamOperator)
         stream << data.string << 'x';
         stream >> value;
 
-        ASSERT_EQ(value.to_bytes(), data.bytes);
         ASSERT_TRUE(stream);
+        ASSERT_EQ(value.to_bytes(), data.bytes);
         ASSERT_EQ(static_cast<char>(stream.peek()), 'x');
+    }
+
+    for (auto &data: uuid_test_data) {
+        UUID value;
+        std::stringstream stream;
+
+        stream << ("{" + std::string(data.string) + "}") << 'x';
+        stream >> value;
+
+        ASSERT_TRUE(stream);
+        ASSERT_EQ(value.to_bytes(), data.bytes);
+        ASSERT_EQ(static_cast<char>(stream.peek()), 'x');
+    }
+
+    for (auto &string: uuid_invalid_strings) {
+        UUID value;
+        std::stringstream stream;
+
+        stream << string;
+        stream >> value;
+
+        ASSERT_FALSE(stream);
     }
 }
 
