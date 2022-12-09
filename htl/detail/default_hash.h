@@ -56,7 +56,7 @@ public:
 
 template <class... Args>
     requires(can_default_hash<Args> && ...)
-std::size_t default_hash(Args &&...args) noexcept
+inline std::size_t default_hash(Args &&...args) noexcept
 {
     return DefaultHasher().update(std::forward<Args>(args)...).digest();
 }
