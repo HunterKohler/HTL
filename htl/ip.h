@@ -1,5 +1,5 @@
-#ifndef HLIB_INET_H_
-#define HLIB_INET_H_
+#ifndef HLIB_IP_H_
+#define HLIB_IP_H_
 
 #include <algorithm>
 #include <array>
@@ -13,218 +13,43 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
-#include <net/if.h>
-#include <netinet/in.h>
 #include <htl/ascii.h>
 #include <htl/config.h>
 #include <htl/detail/default_hash.h>
 #include <htl/detail/encoding.h>
+#include <htl/detail/ip.h>
 #include <htl/detail/iterator.h>
 #include <htl/scope_guard.h>
+#include <htl/unaligned.h>
 #include <htl/utility.h>
 
 namespace htl {
 
 using scope_id_type = std::uint64_t;
 
-namespace detail {
+class IPv4Address;
 
-inline std::errc try_parse_ipv4_address(auto &first, auto &last, auto &bytes)
-{
-    for (int i = 0; i < 4; i++) {
-        if (first == last || !ascii_isdigit(*first)) {
-            return std::errc::invalid_argument;
-        }
+class IPv6Address;
 
-        int value = *first - '0';
-        if (++first == last && value && ascii_isdigit(*first)) {
-            value = 10 * value + *first - '0';
-            if (++first == last && ascii_isdigit(*first)) {
-                value = 10 * value + *first - '0';
-                if (value > 0xFF) {
-                    value /= 10;
-                } else {
-                    ++first;
-                }
-            }
-        }
+class IPAddress;
 
-        if (i < 3 && (first == last || *first != '.')) {
-            return std::errc::invalid_argument;
-        }
+class IPv4Network;
 
-        bytes[i] = std::byte(value);
-    }
+class IPv6Network;
 
-    return {};
-}
+template <class Address>
+class BasicIPAddressIterator;
 
-inline std::errc try_parse_ipv6_address(auto &first, auto &last, auto &bytes);
+template <class Address>
+class BasicIPAddressRange;
 
-inline std::errc try_parse_ipv4_network(
-    auto &first, auto &last, auto &bytes, auto &prefix_length)
-{
-    auto code = try_parse_ipv4_address(first, last, bytes);
-    if (code != std::errc()) {
-        return code;
-    } else if (first == last || *first != '/') {
-        prefix_length = 32;
-    } else if (++first == last || !ascii_isdigit(*first)) {
-        return std::errc::invalid_argument;
-    } else if ((prefix_length = *first - '0') && ++first != last &&
-               ascii_isdigit(*first) &&
-               (prefix_length * 10 + *first - '0') <= 32) {
-        prefix_length = prefix_length * 10 + *first - '0';
-        ++first;
-    }
+using IPv4AddressIterator = BasicIPAddressIterator<IPv4Address>;
 
-    return {};
-}
+using IPv6AddressIterator = BasicIPAddressIterator<IPv6Address>;
 
-inline std::errc try_parse_ipv6_network(
-    auto &first, auto &last, auto &bytes, auto &bytes, auto &prefix_length)
-{
-    auto code = try_parse_ipv4_address(first, last, bytes);
-    if (code != std::errc()) {
-        return code;
-    } else if (first == last || *first != '/') {
-        prefix_length = 32;
-    } else if (++first == last || !ascii_isdigit(*first)) {
-        return std::errc::invalid_argument;
-    } else if ((prefix_length = *first - '0') && ++first != last &&
-               ascii_isdigit(*first)) {
-        prefix_length = prefix_length * 10 + *first - '0';
-        if (++first != last && ascii_isdigit(*first) &&
-            (prefix_length * 10 + *first - '0') <= 128) {
-            prefix_length = prefix_length * 10 + *first - '0';
-            ++first;
-        }
-    }
+using IPv4AddressRange = BasicIPAddressRange<IPv4Address>;
 
-    return {};
-}
-
-inline void ipv4_address_to_chars(auto &bytes, auto &out)
-{
-    iter_write_int(to_underlying(bytes[0]), out);
-    iter_write('.', out);
-    iter_write_int(to_underlying(bytes[1]), out);
-    iter_write('.', out);
-    iter_write_int(to_underlying(bytes[2]), out);
-    iter_write('.', out);
-    iter_write_int(to_underlying(bytes[3]), out);
-}
-
-inline auto ipv6_address_find_zeros(auto &bytes)
-{
-    int max_start = 0;
-    int max_size = 0;
-    for (int i = 0, j = 0; i <= 16; i += 2) {
-        if (bytes[i] != std::byte() || i == 16) {
-            int sz = i - j;
-            if (sz > max_size) {
-                max_start = j;
-                max_size = sz;
-            }
-            j = i;
-        }
-    }
-    return std::pair{ max_start, max_start + max_size };
-}
-
-inline void ipv6_address_to_chars_segment(auto &bytes, int pos, auto &out)
-{
-    auto a = to_underlying(bytes[pos]);
-    auto b = to_underlying(bytes[pos + 1]);
-    char buf[4] = {
-        detail::hex_charset_lower[a >> 4], detail::hex_charset_lower[a & 15],
-        detail::hex_charset_lower[b >> 4], detail::hex_charset_lower[b & 15]
-    };
-
-    auto ptr = buf;
-    for (; ptr < buf + 3 && *ptr == '0';) {
-        ++ptr;
-    }
-
-    for (; ptr < std::end(buf); ++ptr) {
-        iter_write(*ptr, out);
-    }
-}
-
-inline void ipv6_address_to_chars_segments(auto &bytes, auto &out)
-{
-    auto [start, stop] = ipv6_address_find_zeros(bytes);
-
-    if (!stop) {
-        for (int i = 0; i < 14; i += 2) {
-            ipv6_address_to_chars_segment(bytes, i, out);
-            iter_write(':', out);
-        }
-
-        ipv6_address_to_chars_segment(bytes, 14, out);
-    } else if (stop == 16) {
-        iter_write(':', out);
-        iter_write(':', out);
-    } else {
-        for (int i = 0; i < start; i += 2) {
-            hlib_ipv6_address_to_string_segment(address, i, out);
-            iter_write(':', out);
-        }
-
-        if (start == 0 || stop == 16) {
-            iter_write(':', out);
-        }
-
-        for (int i = stop; i < 16; i += 2) {
-            iter_write(':', out);
-            hlib_ipv6_address_to_string_segment(address, i, out);
-        }
-    }
-}
-
-inline std::errc ipv6_address_to_chars_interface(auto scope_id, auto &out)
-{
-    ErrnoScopeGuard guard;
-    char name[IF_NAMESIZE];
-
-    if (!if_indextoname(scope_id, name)) {
-        return std::errc(errno);
-    }
-
-    for (auto pos = name; *pos; ++pos) {
-        iter_write(*pos, out);
-    }
-
-    return {};
-}
-
-inline std::errc ipv6_address_to_chars(auto &bytes, auto scope_id, auto &out)
-{
-    ipv6_address_to_chars_segments(bytes, out);
-
-    if (scope_id) {
-        iter_write('/', out);
-        return ipv6_address_to_chars_interface(scope_id, out);
-    }
-
-    return {};
-}
-
-inline void ipv4_network_to_chars(auto &bytes, auto prefix_length, auto &out)
-{
-    ipv4_address_to_chars(bytes, out);
-    iter_write('/', out);
-    iter_write_int(prefix_length, out);
-}
-
-inline void ipv6_network_to_chars(auto &bytes, auto prefix_length, auto &out)
-{
-    ipv6_address_to_chars_segments(bytes, out);
-    iter_write('/', out);
-    iter_write_int(prefix_length, out);
-}
-
-} // namespace detail
+using IPv6AddressRange = BasicIPAddressRange<IPv6Address>;
 
 class IPv4Address {
 public:
@@ -235,7 +60,7 @@ public:
 
         template <class... Args>
         bytes_type(Args &&...args)
-            : std::array<std::byte, 16>{ static_cast<std::byte>(
+            : std::array<std::byte, 4>{ static_cast<std::byte>(
                   std::forward<Args>(args))... }
         {}
     };
@@ -245,8 +70,9 @@ public:
     IPv4Address(const bytes_type &bytes) noexcept : _bytes(bytes) {}
 
     explicit IPv4Address(uint_type value) noexcept
-        : _bytes(value >> 24, value >> 16, value >> 8, value)
-    {}
+    {
+        store_unaligned_be32(_bytes.data(), value);
+    }
 
     IPv4Address(const IPv4Address &other) noexcept = default;
 
@@ -311,23 +137,22 @@ public:
 
     uint_type to_uint() const noexcept
     {
-        return (_get_uint(0) << 24) | (_get_uint(1) << 16) |
-               (_get_uint(0) << 8) | _get_uint(0);
+        return load_unaligned_be32(_bytes.data());
     }
 
     static IPv4Address any() noexcept
     {
-        return IPv4Address{ 0x00, 0x00, 0x00, 0x00 };
+        return {};
     }
 
     static IPv4Address loopback() noexcept
     {
-        return IPv4Address{ 0x7F, 0x00, 0x00, 0x01 };
+        return bytes_type{ 0x7F, 0x00, 0x00, 0x01 };
     }
 
     static IPv4Address broadcast() noexcept
     {
-        return IPv4Address{ 0xFF, 0xFF, 0xFF, 0xFF };
+        return bytes_type{ 0xFF, 0xFF, 0xFF, 0xFF };
     }
 
     static IPv4Address broadcast(
@@ -335,6 +160,12 @@ public:
     {
         return IPv4Address{ addr.to_uint() | ~mask.to_uint() };
     }
+
+    friend bool operator==(const IPv4Address &, const IPv4Address &) noexcept =
+        default;
+
+    friend std::strong_ordering operator<=>(
+        const IPv4Address &, const IPv4Address &) noexcept = default;
 
 private:
     bytes_type _bytes;
@@ -350,22 +181,17 @@ private:
     }
 };
 
-inline bool operator==(const IPv4Address &a, const IPv4Address &b)
-{
-    return a.to_bytes() == b.to_bytes();
-}
-
-inline std::strong_ordering operator<=>(
-    const IPv4Address &a, const IPv4Address &b)
-{
-    return a.to_bytes() <=> b.to_bytes();
-}
-
-inline IPv4Address make_ipv4_address(std::string_view s)
+inline IPv4Address make_ipv4_address(std::string_view str)
 {
     IPv4Address::bytes_type bytes;
-    std::errc code =
-        detail::try_parse_full_ipv4_address(str.begin(), str.end(), bytes);
+    auto first = str.begin();
+    auto last = str.end();
+    auto code = detail::try_parse_ipv4_address(first, last, bytes);
+
+    if (code == std::errc() && first != last) {
+        code = std::errc::invalid_argument;
+    }
+
     switch (code) {
     case std::errc::invalid_argument:
         throw std::invalid_argument(
@@ -378,8 +204,14 @@ inline IPv4Address make_ipv4_address(
     std::string_view str, std::error_code &ec) noexcept
 {
     IPv4Address::bytes_type bytes;
-    std::errc code =
-        detail::try_parse_full_ipv4_address(str.begin(), str.end(), bytes);
+    auto first = str.begin();
+    auto last = str.end();
+    auto code = detail::try_parse_ipv4_address(first, last, bytes);
+
+    if (code == std::errc() && first != last) {
+        code = std::errc::invalid_argument;
+    }
+
     ec = std::make_error_code(code);
     return bytes;
 }
@@ -416,7 +248,7 @@ operator>>(std::basic_istream<CharT, Traits> &stream, IPv4Address &value)
         return stream;
     }
 
-    IPv4Address::bytes bytes;
+    IPv4Address::bytes_type bytes;
     std::errc code = detail::try_parse_ipv4_address(
         std::istream_iterator<char>(stream), std::default_sentinel, bytes);
     if (code == std::errc()) {
@@ -561,13 +393,19 @@ public:
 
     static IPv6Address any() noexcept
     {
-        return IPv6Address{};
+        return {};
     }
 
     static IPv6Address loopback() noexcept
     {
-        return IPv6Address{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1 };
+        return bytes_type{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1 };
     }
+
+    friend bool operator==(const IPv6Address &, const IPv6Address &) noexcept =
+        default;
+
+    friend std::strong_ordering operator<=>(
+        const IPv6Address &, const IPv6Address &) noexcept = default;
 
 private:
     bytes_type _bytes;
@@ -577,18 +415,9 @@ private:
     {
         return static_cast<std::uint8_t>(_bytes[n]);
     }
+
+    friend IPv6AddressIterator;
 };
-
-inline bool operator==(const IPv6Address &a, const IPv6Address &b)
-{
-    return a.to_bytes() == b.to_bytes();
-}
-
-inline std::strong_ordering operator<=>(
-    const IPv6Address &a, const IPv6Address &b)
-{
-    return a.to_bytes() <=> b.to_bytes();
-}
 
 inline IPv6Address make_ipv6_address(std::string_view str);
 
@@ -758,122 +587,241 @@ operator>>(std::basic_istream<CharT, Traits> &stream, IPAddress &value);
 template <class Alloc>
 class BasicIPAddressIterator;
 
+using IPv4AddressIterator = BasicIPAddressIterator<IPv4Address>;
+using IPv6AddressIterator = BasicIPAddressIterator<IPv6Address>;
+
 template <>
 class BasicIPAddressIterator<IPv4Address> {
 public:
     using value_type = IPv4Address;
-    using difference_type = std::ptrdiff_t;
+    using difference_type = std::int64_t;
     using pointer = const IPv4Address *;
     using reference = const IPv4Address &;
     using iterator_category = std::input_iterator_tag;
 
     BasicIPAddressIterator() noexcept = default;
 
-    BasicIPAddressIterator(const IPv4Address &pos) noexcept : _pos(pos) {}
+    BasicIPAddressIterator(const IPv4Address &address) noexcept
+        : _address(address)
+    {}
 
     reference operator*() const noexcept
     {
-        return _pos;
+        return _address;
     }
 
     pointer operator->() const noexcept
     {
-        return std::addressof(_pos);
+        return std::addressof(_address);
     }
 
-    BasicIPAddressIterator &operator++() noexcept;
+    BasicIPAddressIterator &operator++() noexcept
+    {
+        return *this += 1;
+    }
 
-    BasicIPAddressIterator &operator++(int) noexcept;
+    BasicIPAddressIterator operator++(int) noexcept
+    {
+        auto copy(*this);
+        ++*this;
+        return copy;
+    }
 
-    BasicIPAddressIterator &operator--() noexcept;
+    BasicIPAddressIterator &operator--() noexcept
+    {
+        return *this -= 1;
+    }
 
-    BasicIPAddressIterator &operator--(int) noexcept;
+    BasicIPAddressIterator operator--(int) noexcept
+    {
+        auto copy(*this);
+        --*this;
+        return copy;
+    }
 
-    BasicIPAddressIterator &operator+=(difference_type) noexcept;
+    BasicIPAddressIterator &operator+=(difference_type n) noexcept
+    {
+        _address = IPv4Address(_address.to_uint() + n);
+        return *this;
+    }
 
-    BasicIPAddressIterator &operator-=(difference_type) noexcept;
+    BasicIPAddressIterator &operator-=(difference_type n) noexcept
+    {
+        return *this += -n;
+    }
+
+    friend BasicIPAddressIterator operator+(
+        const BasicIPAddressIterator &a, difference_type b) noexcept
+    {
+        return BasicIPAddressIterator(a) += b;
+    }
+
+    friend BasicIPAddressIterator operator+(
+        difference_type a, const BasicIPAddressIterator &b) noexcept
+    {
+        return b + a;
+    }
+
+    friend BasicIPAddressIterator operator-(
+        const BasicIPAddressIterator &a, difference_type b) noexcept
+    {
+        return BasicIPAddressIterator(a) -= b;
+    }
+
+    friend difference_type operator-(const BasicIPAddressIterator &a,
+                                     const BasicIPAddressIterator &b) noexcept
+    {
+        return a._address.to_uint() - b._address.to_uint();
+    }
 
 private:
-    IPv4Address _pos;
+    IPv4Address _address;
 };
 
 template <>
 class BasicIPAddressIterator<IPv6Address> {
 public:
     using value_type = IPv6Address;
-    using difference_type = std::ptrdiff_t;
+    using difference_type = std::int64_t;
     using pointer = const IPv6Address *;
     using reference = const IPv6Address &;
     using iterator_category = std::input_iterator_tag;
 
     BasicIPAddressIterator() noexcept = default;
 
-    BasicIPAddressIterator(const IPv6Address &pos) noexcept : _pos(pos) {}
+    BasicIPAddressIterator(const IPv6Address &address) noexcept
+        : _address(address)
+    {}
 
     reference operator*() const noexcept
     {
-        return _pos;
+        return _address;
     }
 
     pointer operator->() const noexcept
     {
-        return std::addressof(_pos);
+        return std::addressof(_address);
     }
 
-    BasicIPAddressIterator &operator++() noexcept;
+    BasicIPAddressIterator &operator++() noexcept
+    {
+        return *this += 1;
+    }
 
-    BasicIPAddressIterator &operator++(int) noexcept;
+    BasicIPAddressIterator operator++(int) noexcept
+    {
+        auto copy(*this);
+        ++*this;
+        return copy;
+    }
 
-    BasicIPAddressIterator &operator--() noexcept;
+    BasicIPAddressIterator &operator--() noexcept
+    {
+        return *this -= 1;
+    }
 
-    BasicIPAddressIterator &operator--(int) noexcept;
+    BasicIPAddressIterator operator--(int) noexcept
+    {
+        auto copy(*this);
+        --*this;
+        return copy;
+    }
 
-    BasicIPAddressIterator &operator+=(difference_type) noexcept;
+    BasicIPAddressIterator &operator+=(difference_type n) noexcept
+    {
+        n > 0 ? _add(n) : _sub(n);
+        return *this;
+    }
 
-    BasicIPAddressIterator &operator-=(difference_type) noexcept;
+    BasicIPAddressIterator &operator-=(difference_type n) noexcept
+    {
+        n < 0 ? _add(n) : _sub(n);
+        return *this;
+    }
+
+    friend BasicIPAddressIterator operator+(
+        const BasicIPAddressIterator &a, difference_type b) noexcept
+    {
+        return BasicIPAddressIterator(a) += b;
+    }
+
+    friend BasicIPAddressIterator operator+(
+        difference_type a, const BasicIPAddressIterator &b) noexcept
+    {
+        return b + a;
+    }
+
+    friend BasicIPAddressIterator operator-(
+        const BasicIPAddressIterator &a, difference_type b) noexcept
+    {
+        return BasicIPAddressIterator(a) -= b;
+    }
+
+    friend difference_type operator-(const BasicIPAddressIterator &a,
+                                     const BasicIPAddressIterator &b) noexcept
+    {
+        auto [hi_a, lo_a] = a._get_words();
+        auto [hi_b, lo_b] = b._get_words();
+
+        std::uint64_t carry = lo_b > lo_a;
+
+        lo_a -= lo_b;
+        hi_b += carry;
+        carry = (hi_b < carry);
+        carry += hi_a < hi_b;
+        hi_a -= hi_b;
+        lo_a -= carry;
+
+        return {};
+    }
+
+    friend bool operator==(const BasicIPAddressIterator &,
+                           const BasicIPAddressIterator &) noexcept = default;
+
+    friend std::strong_ordering operator<=>(
+        const BasicIPAddressIterator &,
+        const BasicIPAddressIterator &) noexcept = default;
 
 private:
-    IPv6Address _pos;
+    IPv6Address _address;
+
+    BasicIPAddressIterator(std::uint64_t lo, std::uint64_t hi) noexcept
+    {
+        _set_words(lo, hi);
+    }
+
+    void _set_words(std::uint64_t lo, std::uint64_t hi) noexcept
+    {
+        store_unaligned_be64(_address._bytes.data() + 8, lo);
+        store_unaligned_be64(_address._bytes.data(), hi);
+    }
+
+    std::pair<std::uint64_t, std::uint64_t> _get_words() const noexcept
+    {
+        return { load_unaligned_be64(_address._bytes.data() + 8),
+                 load_unaligned_be64(_address._bytes.data()) };
+    }
+
+    void _add(std::uint64_t n) noexcept
+    {
+        auto [lo, hi] = _get_words();
+        lo += n;
+        n = lo < n;
+        hi += n;
+        lo += hi < n;
+        _set_words(lo, hi);
+    }
+
+    void _sub(std::uint64_t n) noexcept
+    {
+        auto [lo, hi] = _get_words();
+        std::uint64_t carry = lo < n;
+        lo -= n;
+        hi -= carry;
+        lo -= carry < hi;
+        _set_words(lo, hi);
+    }
 };
-
-template <class Address>
-inline bool operator==(const BasicIPAddressIterator<Address> &a,
-                       const BasicIPAddressIterator<Address> &b) noexcept
-{
-    return *a == *b;
-}
-
-template <class Address>
-inline std::strong_ordering operator<=>(
-    const BasicIPAddressIterator<Address> &a,
-    const BasicIPAddressIterator<Address> &b) noexcept
-{
-    return *a <=> *b;
-}
-
-template <class Address>
-inline BasicIPAddressIterator<Address> operator+(
-    const BasicIPAddressIterator<Address> &it,
-    typename BasicIPAddressIterator<Address>::difference_type n) noexcept
-{
-    return BasicIPAddressIterator<Address>(it) += n;
-}
-
-template <class Address>
-inline BasicIPAddressIterator<Address> operator-(
-    const BasicIPAddressIterator<Address> &it,
-    typename BasicIPAddressIterator<Address>::difference_type n) noexcept
-{
-    return BasicIPAddressIterator<Address>(it) -= n;
-}
-
-template <class Address>
-inline typename BasicIPAddressIterator<Address>::difference_type operator-(
-    const BasicIPAddressIterator<Address> &a,
-    const BasicIPAddressIterator<Address> &b) noexcept;
-
-using IPv4AddressIterator = BasicIPAddressIterator<IPv4Address>;
-using IPv6AddressIterator = BasicIPAddressIterator<IPv6Address>;
 
 template <class Address>
 class BasicIPAddressRange {
@@ -888,12 +836,12 @@ public:
 
     iterator begin() const noexcept
     {
-        return iterator(_first);
+        return _first;
     }
 
     iterator end() const noexcept
     {
-        return iterator(_last);
+        return _last;
     }
 
     bool empty() const noexcept
@@ -903,17 +851,29 @@ public:
 
     size_t size() const noexcept
     {
-        return end() - begin();
+        return _last - _first;
     }
 
-    iterator find(const Address &address) const noexcept;
+    iterator find(const Address &address) const noexcept
+    {
+        return address >= *_first && address < *_last
+                   ? iterator(address)
+                   : _last;
+    }
+
+    explicit operator bool() noexcept
+    {
+        return _first != _last;
+    }
+
+    friend bool operator==(const BasicIPAddressRange &,
+                           const BasicIPAddressRange &) noexcept = default;
 
 private:
-    Address _first, _last;
+    iterator _first, _last;
 };
 
 using IPv4AddressRange = BasicIPAddressRange<IPv4Address>;
-
 using IPv6AddressRange = BasicIPAddressRange<IPv6Address>;
 
 class IPv4Network {
@@ -974,9 +934,9 @@ public:
         auto bit_count = _prefix_length & 7;
         auto bit_mask = ~(std::byte(0xFF) >> bit_count);
 
-        std::ranges::fill_n(bytes, byte_count, std::byte(0xFF));
+        std::ranges::fill_n(bytes.begin(), byte_count, std::byte(0xFF));
         bytes[byte_count] = ~bit_mask;
-        std::ranges::fill_n(
+        std::ranges::fill(
             bytes.begin() + byte_count + 1, bytes.end(), std::byte());
 
         return bytes;
@@ -995,7 +955,7 @@ public:
 
         std::ranges::copy_n(address_bytes.begin(), byte_count, bytes.begin());
         bytes[byte_count] = address_bytes[byte_count] & ~bit_mask;
-        std::ranges::fill_n(
+        std::ranges::fill(
             bytes.begin() + byte_count + 1, bytes.end(), std::byte());
 
         return bytes;
@@ -1014,7 +974,7 @@ public:
 
         std::ranges::copy_n(address_bytes.begin(), byte_count, bytes.begin());
         bytes[byte_count] = (address_bytes[byte_count] & ~bit_mask) | bit_mask;
-        std::ranges::fill_n(
+        std::ranges::fill(
             bytes.begin() + byte_count + 1, bytes.end(), std::byte(0xFF));
 
         return bytes;
@@ -1046,22 +1006,26 @@ public:
                    other.canonical();
     }
 
+    friend bool operator==(const IPv4Network &, const IPv4Network &) noexcept =
+        default;
+
 private:
     IPv4Address _address;
     std::uint8_t _prefix_length;
 };
 
-inline bool operator==(const IPv4Network &a, const IPv4Network &b) noexcept
-{
-    return a.address() == b.address() && a.prefix_length() == b.prefix_length();
-}
-
 inline IPv4Network make_ipv4_network(std::string_view str)
 {
-    int prefix_length;
     IPv4Address::bytes_type bytes;
-    std::errc code = detail::try_parse_full_ipv4_network(
-        str.begin(), str.end(), bytes, prefix_length);
+    unsigned int len;
+    auto first = str.begin();
+    auto last = str.end();
+    auto code = detail::try_parse_ipv4_network(first, last, bytes, len);
+
+    if (code == std::errc() && first != last) {
+        code = std::errc::invalid_argument;
+    }
+
     switch (code) {
     case std::errc::invalid_argument:
         throw std::out_of_range(
@@ -1070,18 +1034,25 @@ inline IPv4Network make_ipv4_network(std::string_view str)
         throw std::out_of_range(
             "htl::make_ipv4_network(): Prefix length out of range");
     }
-    return { bytes, prefix_length };
+
+    return { bytes, len };
 }
 
 inline IPv4Network make_ipv4_network(
     std::string_view str, std::error_code &ec) noexcept
 {
-    int prefix_length;
     IPv4Address::bytes_type bytes;
-    std::errc code = detail::try_parse_full_ipv4_network(
-        str.begin(), str.end(), bytes, prefix_length);
+    unsigned int len;
+    auto first = str.begin();
+    auto last = str.end();
+    auto code = detail::try_parse_ipv4_network(first, last, bytes, len);
+
+    if (code == std::errc() && first != last) {
+        code = std::errc::invalid_argument;
+    }
+
     ec = std::make_error_code(code);
-    return { bytes, prefix_length };
+    return { bytes, len };
 }
 
 template <std::output_iterator<char> O>
@@ -1192,9 +1163,9 @@ public:
         auto bit_count = _prefix_length & 7;
         auto bit_mask = std::byte(0xFF) >> bit_count;
 
-        std::ranges::fill_n(bytes, byte_count, std::byte(0xFF));
+        std::ranges::fill_n(bytes.begin(), byte_count, std::byte(0xFF));
         bytes[byte_count] = ~bit_mask;
-        std::ranges::fill_n(
+        std::ranges::fill(
             bytes.begin() + byte_count + 1, bytes.end(), std::byte());
 
         return bytes;
@@ -1213,7 +1184,7 @@ public:
 
         std::ranges::copy_n(address_bytes.begin(), byte_count, bytes.begin());
         bytes[byte_count] = address_bytes[byte_count] & ~bit_mask;
-        std::ranges::fill_n(
+        std::ranges::fill(
             bytes.begin() + byte_count + 1, bytes.end(), std::byte());
 
         return bytes;
@@ -1232,7 +1203,7 @@ public:
 
         std::ranges::copy_n(address_bytes.begin(), byte_count, bytes.begin());
         bytes[byte_count] = address_bytes[byte_count] & ~bit_mask;
-        std::ranges::fill_n(
+        std::ranges::fill(
             bytes.begin() + byte_count + 1, bytes.end(), std::byte(0xFF));
 
         return bytes;
@@ -1264,24 +1235,26 @@ public:
                    other.canonical();
     }
 
+    friend bool operator==(const IPv6Network &, const IPv6Network &) noexcept =
+        default;
+
 private:
     IPv6Address _address;
-    std::int8_t _prefix_length;
+    std::uint8_t _prefix_length;
 };
-
-inline bool operator==(const IPv6Network &a, const IPv6Network &b)
-{
-    return a.address() == b.address() && a.prefix_length() == b.prefix_length();
-}
-
-inline IPv6Network make_ipv6_network(
-    std::string_view str, std::error_code &ec) noexcept;
 
 inline IPv6Network make_ipv6_network(std::string_view str)
 {
-    IPv6Network network;
-    std::errc code =
-        detail::try_parse_full_ipv6_network(str.begin(), str.end(), network);
+    IPv6Address::bytes_type bytes;
+    unsigned int len;
+    auto first = str.begin();
+    auto last = str.begin();
+    auto code = detail::try_parse_ipv6_network(first, last, bytes, len);
+
+    if (code == std::errc()) {
+        code = std::errc::invalid_argument;
+    }
+
     switch (code) {
     case std::errc::invalid_argument:
         throw std::out_of_range(
@@ -1290,14 +1263,32 @@ inline IPv6Network make_ipv6_network(std::string_view str)
         throw std::out_of_range(
             "htl::make_ipv6_network(): Prefix length out of range");
     }
-    return network;
+
+    return { bytes, len };
+}
+
+inline IPv6Network make_ipv6_network(
+    std::string_view str, std::error_code &ec) noexcept
+{
+    IPv6Address::bytes_type bytes;
+    unsigned int len;
+    auto first = str.begin();
+    auto last = str.begin();
+    auto code = detail::try_parse_ipv6_network(first, last, bytes, len);
+
+    if (code == std::errc()) {
+        code = std::errc::invalid_argument;
+    }
+
+    ec = std::make_error_code(code);
+    return { bytes, len };
 }
 
 template <std::output_iterator<char> O>
 inline O to_chars(const IPv6Network &value, O out)
 {
     detail::ipv6_network_to_chars(
-        value.address.to_bytes(), value.prefix_length(), out);
+        value.address().to_bytes(), value.prefix_length(), out);
     return out;
 }
 
