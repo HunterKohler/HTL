@@ -15,7 +15,14 @@ to_string(bool value, const Alloc &alloc = Alloc())
 
 template <class Alloc = std::allocator<char>, std::integral T>
 constexpr std::basic_string<char, std::char_traits<char>, Alloc>
-to_string(T value, const Alloc &alloc = Alloc(), int base = 10)
+to_string(T value, const Alloc &alloc = Alloc())
+{
+    return to_string(value, 10, alloc);
+}
+
+template <class Alloc = std::allocator<char>, std::integral T>
+constexpr std::basic_string<char, std::char_traits<char>, Alloc>
+to_string(T value, int base, const Alloc &alloc = Alloc())
 {
     std::basic_string<char, std::char_traits<char>, Alloc> res(alloc);
     to_chars(value, std::back_inserter(res), base);
@@ -33,7 +40,7 @@ to_string(T value, const Alloc &alloc = Alloc())
 
 template <class Alloc = std::allocator<char>, std::floating_point T>
 constexpr std::basic_string<char, std::char_traits<char>, Alloc>
-to_string(T value, const Alloc &alloc = Alloc(), std::chars_format fmt)
+to_string(T value, std::chars_format fmt, const Alloc &alloc = Alloc())
 {
     std::basic_string<char, std::char_traits<char>, Alloc> res(alloc);
     to_chars(value, std::back_inserter(res), fmt);
@@ -42,7 +49,7 @@ to_string(T value, const Alloc &alloc = Alloc(), std::chars_format fmt)
 
 template <class Alloc = std::allocator<char>, std::floating_point T>
 constexpr std::basic_string<char, std::char_traits<char>, Alloc> to_string(
-    T value, const Alloc &alloc = Alloc(), std::chars_format fmt, int precision)
+    T value, std::chars_format fmt, int precision, const Alloc &alloc = Alloc())
 {
     std::basic_string<char, std::char_traits<char>, Alloc> res(alloc);
     to_chars(value, std::back_inserter(res), fmt, precision);
