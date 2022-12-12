@@ -10,7 +10,11 @@ template <class Alloc = std::allocator<char>>
 constexpr std::basic_string<char, std::char_traits<char>, Alloc>
 to_string(bool value, const Alloc &alloc = Alloc())
 {
-    return value ? { "true", alloc } : { "false", alloc };
+    if (value) {
+        return { "true", alloc };
+    } else {
+        return { "false", alloc };
+    }
 }
 
 template <class Alloc = std::allocator<char>, std::integral T>
