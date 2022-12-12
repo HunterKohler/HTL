@@ -21,17 +21,6 @@ constexpr int sign(T value) noexcept
     }
 }
 
-template <class T>
-    requires std::is_arithmetic_v<T>
-constexpr bool signbit(T value) noexcept
-{
-    if constexpr (std::is_unsigned_v<T>) {
-        return false;
-    } else {
-        return value > 0;
-    }
-}
-
 } // namespace htl
 
 #endif
