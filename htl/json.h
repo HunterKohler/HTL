@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <functional>
 #include <initializer_list>
+#include <iostream>
 #include <iterator>
 #include <limits>
 #include <memory>
@@ -478,6 +479,36 @@ public:
         noexcept(
             std::allocator_traits<Alloc>::is_always_equal::value ||
             std::allocator_traits<Alloc>::propagate_on_container_swap::value);
+
+    friend void swap(BasicDocument &a, BasicDocument &b) //
+        noexcept(noexcept(a.swap(b)))
+    {
+        a.swap(b);
+    }
+
+    friend bool operator==(const BasicDocument &a, const BasicDocument &b)
+    {
+        if (a.type() != b.type()) {
+            switch (a.type()) {
+            case Type::Null:
+                return true;
+            case Type::Bool:
+                return a.as_bool() == b.as_bool();
+            case Type::Int:
+                return a.as_int() == b.as_int();
+            case Type::Float:
+                return a.as_float() == b.as_float();
+            case Type::String:
+                return a.as_string() == b.as_string();
+            case Type::Array:
+                return a.as_array() == b.as_array();
+            case Type::Object:
+                return a.as_object() == b.as_object();
+            }
+        }
+
+        return false;
+    }
 
 private:
     using StringAlloc =
@@ -2909,6 +2940,68 @@ inline O serialize(
 {
     return BasicSerializer(opts, alloc).serialize(value, std::move(out));
 }
+
+template <std::output_iterator O, class Alloc>
+inline O to_chars(const BasicDocument<Alloc> &value, O out);
+
+template <std::output_iterator O, class Alloc>
+inline O to_chars(const BasicString<Alloc> &value, O out);
+
+template <std::output_iterator O, class Alloc>
+inline O to_chars(const BasicArray<Alloc> &value, O out);
+
+template <std::output_iterator O, class Alloc>
+inline O to_chars(const BasicObject<Alloc> &value, O out);
+
+template <class Alloc = std::allocator<char>, class ValueAlloc>
+inline std::basic_string<char, std::char_traits<char>, Alloc>
+to_string(const BasicDocument<ValueAlloc> &value, const Alloc &alloc = Alloc());
+
+template <class Alloc = std::allocator<char>, class ValueAlloc>
+inline std::basic_string<char, std::char_traits<char>, Alloc>
+to_string(const BasicString<ValueAlloc> &value, const Alloc &alloc = Alloc());
+
+template <class Alloc = std::allocator<char>, class ValueAlloc>
+inline std::basic_string<char, std::char_traits<char>, Alloc>
+to_string(const BasicArray<ValueAlloc> &value, const Alloc &alloc = Alloc());
+
+template <class Alloc = std::allocator<char>, class ValueAlloc>
+inline std::basic_string<char, std::char_traits<char>, Alloc>
+to_string(const BasicObject<ValueAlloc> &value, const Alloc &alloc = Alloc());
+
+template <class CharT, class Traits, class Alloc>
+inline std::basic_ostream<CharT, Traits> &operator<<(
+    std::basic_ostream<CharT, Traits> &stream,
+    const BasicDocument<Alloc> &value);
+
+template <class CharT, class Traits, class Alloc>
+inline std::basic_ostream<CharT, Traits> &operator<<(
+    std::basic_ostream<CharT, Traits> &stream, const BasicString<Alloc> &value);
+
+template <class CharT, class Traits, class Alloc>
+inline std::basic_ostream<CharT, Traits> &operator<<(
+    std::basic_ostream<CharT, Traits> &stream, const BasicArray<Alloc> &value);
+
+template <class CharT, class Traits, class Alloc>
+inline std::basic_ostream<CharT, Traits> &operator<<(
+    std::basic_ostream<CharT, Traits> &stream, const BasicObject<Alloc> &value);
+
+template <class CharT, class Traits, class Alloc>
+inline std::basic_istream<CharT, Traits> &operator>>(
+    std::basic_istream<CharT, Traits> &stream,
+    const BasicDocument<Alloc> &value);
+
+template <class CharT, class Traits, class Alloc>
+inline std::basic_istream<CharT, Traits> &operator>>(
+    std::basic_istream<CharT, Traits> &stream, const BasicString<Alloc> &value);
+
+template <class CharT, class Traits, class Alloc>
+inline std::basic_istream<CharT, Traits> &operator>>(
+    std::basic_istream<CharT, Traits> &stream, const BasicArray<Alloc> &value);
+
+template <class CharT, class Traits, class Alloc>
+inline std::basic_istream<CharT, Traits> &operator>>(
+    std::basic_istream<CharT, Traits> &stream, const BasicObject<Alloc> &value);
 
 } // namespace htl::json
 
