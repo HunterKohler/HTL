@@ -1,11 +1,9 @@
 SHELL = bash
-OS = $(shell uname)
 
 GCOV ?= gcov
 LCOV ?= lcov
 CMAKE ?= cmake
 GENHTML ?= genhtml
-OPEN ?= $(if OS == "Darwin",open,xdg-open)
 
 GTEST_REPO = https://github.com/google/googletest.git
 GTEST_LIB = ./build/lib/libgtest.a
@@ -45,8 +43,7 @@ CXXFLAGS += \
 	-Wunreachable-code \
 	-Wpointer-arith \
 	-Warray-bounds \
-	-Wno-sign-compare \
-	-Wno-switch
+	-Wno-sign-compare
 
 LDFLAGS =
 LDLIBS =
@@ -66,7 +63,7 @@ all: $(LIB) $(TEST_BIN)
 lib: $(LIB)
 
 test: $(TEST_BIN)
-	$<
+	$< $(TEST_FLAGS)
 	@ mkdir -p ./build/coverage
 	@ $(RM) -r ./build/coverage/test.info ./build/coverage/test
 	@ $(LCOV) --quiet \
@@ -85,10 +82,9 @@ test: $(TEST_BIN)
 		./build/coverage/test.info
 
 coverage: | test
-	@ $(OPEN) ./build/coverage/test/index.html
 
 docs:
-	@ doxygen .
+	@ doxygen
 
 deps: $(GTEST)
 

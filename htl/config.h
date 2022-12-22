@@ -35,4 +35,9 @@
 #define HTL_ATTR_PACKED
 #endif
 
+/**
+ * HTL namespace
+ */
+namespace htl {}
+
 #endif
