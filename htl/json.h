@@ -1,3 +1,9 @@
+/**
+ * @file htl/json.h
+ *
+ * JSON library
+ */
+
 #ifndef HTL_JSON_H_
 #define HTL_JSON_H_
 
@@ -6,6 +12,7 @@
 #include <cstddef>
 #include <functional>
 #include <initializer_list>
+#include <ios>
 #include <iostream>
 #include <iterator>
 #include <limits>
@@ -488,22 +495,22 @@ public:
 
     friend bool operator==(const BasicDocument &a, const BasicDocument &b)
     {
-        if (a.type() != b.type()) {
+        if (a.type() == b.type()) {
             switch (a.type()) {
             case Type::Null:
                 return true;
             case Type::Bool:
-                return a.as_bool() == b.as_bool();
+                return a.is_bool() == b.is_bool();
             case Type::Int:
-                return a.as_int() == b.as_int();
+                return a.is_int() == b.is_int();
             case Type::Float:
-                return a.as_float() == b.as_float();
+                return a.is_float() == b.is_float();
             case Type::String:
-                return a.as_string() == b.as_string();
+                return a.is_string() == b.is_string();
             case Type::Array:
-                return a.as_array() == b.as_array();
+                return a.is_array() == b.is_array();
             case Type::Object:
-                return a.as_object() == b.as_object();
+                return a.is_object() == b.is_object();
             }
         }
 
@@ -634,7 +641,7 @@ private:
 
     void _copy_construct(const BasicDocument &other, const Alloc &alloc)
     {
-        switch (_type) {
+        switch (other._type) {
         case Type::Null:
         case Type::Bool:
         case Type::Int:
@@ -660,7 +667,7 @@ private:
 
     void _move_construct(BasicDocument &&other) noexcept
     {
-        switch (_type) {
+        switch (other._type) {
         case Type::Null:
         case Type::Bool:
         case Type::Int:
@@ -832,10 +839,11 @@ private:
 template <class Alloc>
 class BasicArray {
 private:
-    using BaseAlloc = typename std::allocator_traits<Alloc>::rebind_alloc<
-        BasicDocument<Alloc>>;
+    using BaseValue = BasicDocument<Alloc>;
+    using BaseAlloc =
+        typename std::allocator_traits<Alloc>::rebind_alloc<BaseValue>;
 
-    using Base = std::vector<BasicDocument<Alloc>, BaseAlloc>;
+    using Base = std::vector<BaseValue, BaseAlloc>;
 
     Base _base;
 
@@ -881,7 +889,7 @@ public:
     BasicArray(const BasicArray &other) = default;
 
     BasicArray(const BasicArray &other, const Alloc &alloc)
-        : _base(other, BaseAlloc(alloc))
+        : _base(other._base, BaseAlloc(alloc))
     {}
 
     BasicArray(BasicArray &&other) noexcept = default;
@@ -1186,12 +1194,15 @@ public:
 template <class Alloc>
 class BasicObject {
 private:
-    using BaseAlloc = typename std::allocator_traits<Alloc>::rebind_alloc<
-        std::pair<const BasicString<Alloc>, BasicDocument<Alloc>>>;
-
+    using BaseKey = BasicString<Alloc>;
+    using BaseMapped = BasicDocument<Alloc>;
+    using BaseValue = std::pair<const BaseKey, BaseMapped>;
+    using BaseHash = detail::StringViewHash;
+    using BaseKeyEqual = detail::StringViewEqual;
+    using BaseAlloc =
+        typename std::allocator_traits<Alloc>::rebind_alloc<BaseValue>;
     using Base = std::unordered_map<
-        BasicString<Alloc>, BasicDocument<Alloc>, detail::StringViewHash,
-        detail::StringViewEqual, BaseAlloc>;
+        BaseKey, BaseMapped, BaseHash, BaseKeyEqual, BaseAlloc>;
 
     Base _base;
 
@@ -1201,8 +1212,6 @@ public:
     using mapped_type = BasicDocument<Alloc>;
     using value_type =
         std::pair<const BasicString<Alloc>, BasicDocument<Alloc>>;
-    using hasher = Base::hasher;
-    using key_equal = Base::key_equal;
     using allocator_type = Alloc;
     using pointer = Base::pointer;
     using const_pointer = Base::const_pointer;
@@ -1212,10 +1221,6 @@ public:
     using difference_type = std::ptrdiff_t;
     using iterator = Base::iterator;
     using const_iterator = Base::const_iterator;
-    using local_iterator = Base::local_iterator;
-    using const_local_iterator = Base::const_local_iterator;
-    using node_type = Base::node_type;
-    using insert_return_type = Base::insert_return_type;
 
     BasicObject() = default;
 
@@ -1251,7 +1256,9 @@ public:
     {}
 
     BasicObject(std::initializer_list<value_type> ilist,
-                size_type bucket_count = 0, const Alloc &alloc = Alloc());
+                size_type bucket_count = 0, const Alloc &alloc = Alloc())
+        : _base(ilist, bucket_count, BaseAlloc(alloc))
+    {}
 
     BasicObject(std::initializer_list<value_type> ilist, const Alloc &alloc)
         : BasicObject(ilist, 0, alloc)
@@ -1393,32 +1400,6 @@ public:
     void insert(std::initializer_list<value_type> ilist)
     {
         _base.insert(ilist);
-    }
-
-    node_type extract(const_iterator pos)
-    {
-        return _base.extract(pos);
-    }
-
-    node_type extract(const key_type &key)
-    {
-        return _base.extract(key);
-    }
-
-    template <class K>
-    node_type extract(K &&key)
-    {
-        return _base.extract(std::forward<K>(key));
-    }
-
-    insert_return_type insert(node_type &&node)
-    {
-        return _base.insert(std::move(node));
-    }
-
-    iterator insert(const_iterator hint, node_type &&node)
-    {
-        return _base.insert(hint, std::move(node));
     }
 
     template <class... Args>
@@ -1598,76 +1579,6 @@ public:
         return _base.at(key);
     }
 
-    size_type bucket_count() const noexcept
-    {
-        return _base.bucket_count();
-    }
-
-    size_type max_bucket_count() const noexcept
-    {
-        return _base.max_bucket_count();
-    }
-
-    size_type bucket_size(size_type n) const
-    {
-        return _base.bucket_size(n);
-    }
-
-    size_type bucket(const key_type &key) const
-    {
-        return _base.bucket(key);
-    }
-
-    local_iterator begin(size_type n)
-    {
-        return _base.begin(n);
-    }
-
-    const_local_iterator begin(size_type n) const
-    {
-        return _base.begin(n);
-    }
-
-    local_iterator end(size_type n)
-    {
-        return _base.end(n);
-    }
-
-    const_local_iterator end(size_type n) const
-    {
-        return _base.end(n);
-    }
-
-    const_local_iterator cbegin(size_type n) const
-    {
-        return _base.cbegin(n);
-    }
-
-    const_local_iterator cend(size_type n) const
-    {
-        return _base.cend(n);
-    }
-
-    float load_factor() const noexcept
-    {
-        return _base.load_factor();
-    }
-
-    float max_load_factor() const noexcept
-    {
-        return _base.max_load_factor();
-    }
-
-    void max_load_factor(float new_value)
-    {
-        return _base.max_load_factor(new_value);
-    }
-
-    void rehash(size_type n)
-    {
-        return _base.rehash(n);
-    }
-
     void reserve(size_type n)
     {
         return _base.reserve(n);
@@ -1777,8 +1688,8 @@ public:
 
     BasicString(BasicString &&other) noexcept = default;
 
-    BasicString(BasicString &&other, const Alloc &alloc) noexcept(
-        std::allocator_traits<Alloc>::is_always_equal::value)
+    BasicString(BasicString &&other, const Alloc &alloc) //
+        noexcept(std::allocator_traits<Alloc>::is_always_equal::value)
         : _base(std::move(other._base), BaseAlloc(alloc))
     {}
 
@@ -2327,9 +2238,10 @@ public:
         _base.copy(dest, n, pos);
     }
 
-    void swap(BasicString &other) noexcept(
-        std::allocator_traits<Alloc>::propagate_on_container_swap::value ||
-        std::allocator_traits<Alloc>::is_always_equal::value)
+    void swap(BasicString &other) //
+        noexcept(
+            std::allocator_traits<Alloc>::propagate_on_container_swap::value ||
+            std::allocator_traits<Alloc>::is_always_equal::value)
     {
         _base.swap(other._base);
     }
@@ -2689,21 +2601,21 @@ template <class I, class T>
 struct ParseResult {
     [[no_unique_address]] I in;
     T value;
-    ParseError err;
+    ParseError error;
 
     template <class I2, class T2>
         requires std::convertible_to<const I &, I2> &&
                  std::convertible_to<const T &, T2>
     operator ParseResult<I2, T2>() const &
     {
-        return { in, value, err };
+        return { in, value, error };
     }
 
     template <class I2, class T2>
         requires std::convertible_to<I, I2> && std::convertible_to<T, T2>
     operator ParseResult<I2, T2>() &&
     {
-        return { std::move(in), std::move(value), err };
+        return { std::move(in), std::move(value), error };
     }
 };
 
@@ -2941,67 +2853,183 @@ inline O serialize(
     return BasicSerializer(opts, alloc).serialize(value, std::move(out));
 }
 
-template <std::output_iterator O, class Alloc>
-inline O to_chars(const BasicDocument<Alloc> &value, O out);
+template <std::output_iterator<char> O, class Alloc>
+inline O to_chars(const BasicDocument<Alloc> &value, O out)
+{
+    return serialize(value, std::move(out));
+}
 
-template <std::output_iterator O, class Alloc>
-inline O to_chars(const BasicString<Alloc> &value, O out);
+template <std::output_iterator<char> O, class Alloc>
+inline O to_chars(const BasicString<Alloc> &value, O out)
+{
+    return serialize(value, std::move(out));
+}
 
-template <std::output_iterator O, class Alloc>
-inline O to_chars(const BasicArray<Alloc> &value, O out);
+template <std::output_iterator<char> O, class Alloc>
+inline O to_chars(const BasicArray<Alloc> &value, O out)
+{
+    return serialize(value, std::move(out));
+}
 
-template <std::output_iterator O, class Alloc>
-inline O to_chars(const BasicObject<Alloc> &value, O out);
+template <std::output_iterator<char> O, class Alloc>
+inline O to_chars(const BasicObject<Alloc> &value, O out)
+{
+    return serialize(value, std::move(out));
+}
 
 template <class Alloc = std::allocator<char>, class ValueAlloc>
 inline std::basic_string<char, std::char_traits<char>, Alloc>
-to_string(const BasicDocument<ValueAlloc> &value, const Alloc &alloc = Alloc());
+to_string(const BasicDocument<ValueAlloc> &value, const Alloc &alloc = Alloc())
+{
+    std::basic_string<char, std::char_traits<char>, Alloc> dest(alloc);
+    to_chars(value, std::back_inserter(dest));
+    return dest;
+}
 
 template <class Alloc = std::allocator<char>, class ValueAlloc>
 inline std::basic_string<char, std::char_traits<char>, Alloc>
-to_string(const BasicString<ValueAlloc> &value, const Alloc &alloc = Alloc());
+to_string(const BasicString<ValueAlloc> &value, const Alloc &alloc = Alloc())
+{
+    std::basic_string<char, std::char_traits<char>, Alloc> dest(alloc);
+    to_chars(value, std::back_inserter(dest));
+    return dest;
+}
 
 template <class Alloc = std::allocator<char>, class ValueAlloc>
 inline std::basic_string<char, std::char_traits<char>, Alloc>
-to_string(const BasicArray<ValueAlloc> &value, const Alloc &alloc = Alloc());
+to_string(const BasicArray<ValueAlloc> &value, const Alloc &alloc = Alloc())
+{
+    std::basic_string<char, std::char_traits<char>, Alloc> dest(alloc);
+    to_chars(value, std::back_inserter(dest));
+    return dest;
+}
 
 template <class Alloc = std::allocator<char>, class ValueAlloc>
 inline std::basic_string<char, std::char_traits<char>, Alloc>
-to_string(const BasicObject<ValueAlloc> &value, const Alloc &alloc = Alloc());
+to_string(const BasicObject<ValueAlloc> &value, const Alloc &alloc = Alloc())
+{
+    std::basic_string<char, std::char_traits<char>, Alloc> dest(alloc);
+    to_chars(value, std::back_inserter(dest));
+    return dest;
+}
 
 template <class CharT, class Traits, class Alloc>
 inline std::basic_ostream<CharT, Traits> &operator<<(
     std::basic_ostream<CharT, Traits> &stream,
-    const BasicDocument<Alloc> &value);
+    const BasicDocument<Alloc> &value)
+{
+    to_chars(value, std::ostream_iterator<char>(stream));
+    return stream;
+}
 
 template <class CharT, class Traits, class Alloc>
 inline std::basic_ostream<CharT, Traits> &operator<<(
-    std::basic_ostream<CharT, Traits> &stream, const BasicString<Alloc> &value);
+    std::basic_ostream<CharT, Traits> &stream, const BasicString<Alloc> &value)
+{
+    to_chars(value, std::ostream_iterator<char>(stream));
+    return stream;
+}
 
 template <class CharT, class Traits, class Alloc>
 inline std::basic_ostream<CharT, Traits> &operator<<(
-    std::basic_ostream<CharT, Traits> &stream, const BasicArray<Alloc> &value);
+    std::basic_ostream<CharT, Traits> &stream, const BasicArray<Alloc> &value)
+{
+    to_chars(value, std::ostream_iterator<char>(stream));
+    return stream;
+}
 
 template <class CharT, class Traits, class Alloc>
 inline std::basic_ostream<CharT, Traits> &operator<<(
-    std::basic_ostream<CharT, Traits> &stream, const BasicObject<Alloc> &value);
+    std::basic_ostream<CharT, Traits> &stream, const BasicObject<Alloc> &value)
+{
+    to_chars(value, std::ostream_iterator<char>(stream));
+    return stream;
+}
 
 template <class CharT, class Traits, class Alloc>
 inline std::basic_istream<CharT, Traits> &operator>>(
-    std::basic_istream<CharT, Traits> &stream,
-    const BasicDocument<Alloc> &value);
+    std::basic_istream<CharT, Traits> &stream, BasicDocument<Alloc> &dest)
+{
+    if (stream) {
+        auto result = parse(
+            std::istream_iterator<char>(stream), std::default_sentinel,
+            dest.get_allocator());
+
+        if (result.error) {
+            stream.setstate(std::ios::failbit);
+        } else {
+            dest = std::move(result.dest);
+        }
+    }
+
+    return stream;
+}
 
 template <class CharT, class Traits, class Alloc>
-inline std::basic_istream<CharT, Traits> &operator>>(
-    std::basic_istream<CharT, Traits> &stream, const BasicString<Alloc> &value);
+inline std::basic_istream<CharT, Traits> &
+operator>>(std::basic_istream<CharT, Traits> &stream, BasicString<Alloc> &dest)
+{
+    if (!stream) {
+        return stream;
+    }
+
+    BasicDocument<Alloc> document(dest.get_allocator());
+    stream >> document;
+
+    if (!stream) {
+        return stream;
+    } else if (!document.is_string()) {
+        stream.setstate(std::ios::failbit);
+        return stream;
+    }
+
+    dest = std::move(document.get_string());
+    return stream;
+}
 
 template <class CharT, class Traits, class Alloc>
-inline std::basic_istream<CharT, Traits> &operator>>(
-    std::basic_istream<CharT, Traits> &stream, const BasicArray<Alloc> &value);
+inline std::basic_istream<CharT, Traits> &
+operator>>(std::basic_istream<CharT, Traits> &stream, BasicArray<Alloc> &dest)
+{
+    if (!stream) {
+        return stream;
+    }
+
+    BasicDocument<Alloc> document(dest.get_allocator());
+    stream >> document;
+
+    if (!stream) {
+        return stream;
+    } else if (!document.is_array()) {
+        stream.setstate(std::ios::failbit);
+        return stream;
+    }
+
+    dest = std::move(document.get_array());
+    return stream;
+}
 
 template <class CharT, class Traits, class Alloc>
-inline std::basic_istream<CharT, Traits> &operator>>(
-    std::basic_istream<CharT, Traits> &stream, const BasicObject<Alloc> &value);
+inline std::basic_istream<CharT, Traits> &
+operator>>(std::basic_istream<CharT, Traits> &stream, BasicObject<Alloc> &dest)
+{
+    if (!stream) {
+        return stream;
+    }
+
+    BasicDocument<Alloc> document(dest.get_allocator());
+    stream >> document;
+
+    if (!stream) {
+        return stream;
+    } else if (!document.is_object()) {
+        stream.setstate(std::ios::failbit);
+        return stream;
+    }
+
+    dest = std::move(document.get_object());
+    return stream;
+}
 
 } // namespace htl::json
 

@@ -2,13 +2,17 @@
 #define HTL_DETAIL_JSON_H_
 
 #include <charconv>
+#include <climits>
 #include <concepts>
+#include <cuchar>
 #include <functional>
 #include <iterator>
 #include <memory>
 #include <string>
 #include <utility>
 #include <vector>
+#include <cxxabi.h>
+#include <htl/detail/encoding.h>
 #include <htl/jsonfwd.h>
 
 namespace htl::json::detail {
@@ -20,6 +24,107 @@ inline auto make_common_iterator(auto it)
         return it;
     } else {
         return std::common_iterator<I, S>(std::move(it));
+    }
+}
+
+// See code point bit table:
+// https://en.wikipedia.org/wiki/UTF-8#Encoding
+template <class I, class S>
+inline bool read_utf8_char(I &first, S &last, char32_t &code_point)
+{
+    if (first == last) {
+        return false;
+    }
+
+    char8_t b1 = *first;
+
+    if ((b1 >> 7) == 0b0) {
+        code_point = b1;
+    } else if (++first == last) {
+        return false;
+    } else if ((b1 >> 5) == 0b110) {
+        char8_t b2 = *first;
+
+        if ((b2 >> 6) != 0b10) {
+            return false;
+        }
+
+        code_point = (static_cast<char32_t>(b1) << 6) | (b2 & 0x3F);
+    } else if ((b1 >> 4) == 0b1110) {
+        char8_t b2 = *first;
+
+        if ((b2 >> 6) != 0b10 || ++first == last) {
+            return false;
+        }
+
+        char8_t b3 = *first;
+
+        if ((b3 >> 6) != 0b10) {
+            return false;
+        }
+
+        code_point = //
+            (static_cast<char32_t>(b1) << 12) |
+            ((static_cast<char32_t>(b2) & 0x3F) << 6) | (b3 & 0x3F);
+    } else if ((b1 >> 3) == 0b11110) {
+        char8_t b2 = *first;
+
+        if ((b2 >> 6) != 0b10 || ++first == last) {
+            return false;
+        }
+
+        char8_t b3 = *first;
+
+        if ((b3 >> 6) != 0b10 || ++first == last) {
+            return false;
+        }
+
+        char8_t b4 = *first;
+
+        if ((b4 >> 6) != 0b10) {
+            return false;
+        }
+
+        code_point =
+            (static_cast<char32_t>(b1) << 18) |
+            ((static_cast<char32_t>(b2) & 0x3F) << 12) |
+            ((static_cast<char32_t>(b3) & 0x3F) << 6) | (b4 & 0x3F);
+    }
+
+    ++first;
+    return true;
+}
+
+template <class O>
+inline void write_char8(O &out, char8_t c)
+{
+    *out = c;
+    ++out;
+}
+
+template <class O>
+inline std::size_t write_utf8_char(O &out, char32_t code_point)
+{
+    if (code_point > 0x10FFFF) {
+        return 0;
+    } else if (!(code_point >> 7)) {
+        write_char8(out, code_point);
+        return 1;
+    } else if (!(code_point >> 11)) {
+        write_char8(out, 0xC0 | (code_point >> 6));
+        write_char8(out, 0x80 | (code_point & 0x3F));
+        return 2;
+    } else if (!(code_point >> 16)) {
+        write_char8(out, 0xE0 | (code_point >> 12));
+        write_char8(out, 0x80 | ((code_point >> 6) & 0x3F));
+        write_char8(out, 0x80 | (code_point & 0x3F));
+        return 3;
+    } else {
+        write_char8(out, 0xF0 | (code_point >> 18));
+        write_char8(out, 0x80 | ((code_point >> 12) & 0x3F));
+        write_char8(out, 0x80 | ((code_point >> 6) & 0x3F));
+        write_char8(out, 0x80 | (code_point & 0x3F));
+        return 4;
     }
 }
 
@@ -621,7 +726,9 @@ struct SerializeHandler {
         }
     }
 
-    void write(const char *first, const char *last)
+    template <std::input_iterator I, std::sentinel_for<I> S>
+        requires std::convertible_to<std::iter_reference_t<I>, char>
+    void write(I first, S last)
     {
         for (; first != last; ++first) {
             write(*first);
@@ -665,8 +772,61 @@ struct SerializeHandler {
     void serialize(const BasicString<Alloc> &value)
     {
         write('"');
-        write(value);
+
+        auto first = value.data();
+        auto last = first + value.size();
+
+        for (; first != last;) {
+            char32_t code_point;
+
+            if (!read_utf8_char(first, last, code_point)) {
+                code_point = 0xFFFD;
+            }
+
+            if (!write_escaped_character(code_point)) {
+                write_utf8_char(out, code_point);
+            }
+        }
+
         write('"');
+    }
+
+    bool write_escaped_character(char32_t code_point)
+    {
+        if (code_point < 0x20 || code_point == 0x7F) {
+            write("\\u00");
+            write(htl::detail::hex_charset_lower[code_point >> 4]);
+            write(htl::detail::hex_charset_lower[code_point & 15]);
+            return true;
+        }
+
+        switch (code_point) {
+        case '"':
+            write("\\\"");
+            break;
+        case '\\':
+            write("\\\\");
+            break;
+        case '\b':
+            write("\\\b");
+            break;
+        case '\f':
+            write("\\\f");
+            break;
+        case '\n':
+            write("\\\n");
+            break;
+        case '\r':
+            write("\\\r");
+            break;
+        case '\t':
+            write("\\\t");
+            break;
+        default:
+            return false;
+        }
+
+        return true;
     }
 
     void serialize(const BasicArray<Alloc> &value)
@@ -744,6 +904,7 @@ struct SerializeHandler {
         if (pos.is_array_last()) {
             dedent();
             write(']');
+            stack.pop_back();
             return;
         } else if (!pos.is_array_first()) {
             write(',');
@@ -759,6 +920,7 @@ struct SerializeHandler {
         if (pos.is_object_last()) {
             dedent();
             write('}');
+            stack.pop_back();
             return;
         } else if (!pos.is_object_first()) {
             write(',');
@@ -796,19 +958,21 @@ struct SerializeHandler {
             serialize(value.get_string());
             break;
         case Type::Array:
-            if (!value.get_array().size()) {
-                write("[]");
-            } else {
+            if (value.get_array().size()) {
+                write('[');
                 indent();
                 stack.emplace_back(value, value.get_array().begin());
+            } else {
+                write("[]");
             }
             break;
         case Type::Object:
-            if (!value.get_object().size()) {
-                write("{}");
-            } else {
+            if (value.get_object().size()) {
+                write('{');
                 indent();
                 stack.emplace_back(value, value.get_object().begin());
+            } else {
+                write("{}");
             }
             break;
         }

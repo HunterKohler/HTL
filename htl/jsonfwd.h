@@ -1,3 +1,9 @@
+/**
+ * @file htl/jsonfwd.h
+ *
+ * Forward declarations for JSON library
+ */
+
 #ifndef HTL_JSONFWD_H_
 #define HTL_JSONFWD_H_
 
@@ -6,6 +12,9 @@
 #include <memory>
 #include <memory_resource>
 
+/**
+ * JSON namespace
+ */
 namespace htl::json {
 
 using Null = std::nullptr_t;
