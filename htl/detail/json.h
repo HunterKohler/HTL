@@ -31,12 +31,6 @@ inline auto make_common_iterator(auto it)
     }
 }
 
-// https://www.unicode.org/versions/Unicode15.0.0/ch03.pdf#page=22
-inline bool unicode_is_code_point(char32_t value) noexcept
-{
-    return value <= 0x10FFFF;
-}
-
 // https://www.unicode.org/versions/Unicode15.0.0/ch03.pdf#page=49
 inline bool unicode_is_noncharacter(char32_t value) noexcept
 {
@@ -70,24 +64,6 @@ inline char32_t unicode_surrogate_code_point(
     return ((static_cast<char32_t>(high) - 0xD800) << 10) +
            (static_cast<char32_t>(low) - 0xDC00) + 0x10000;
 }
-
-// // https://unicode.org/glossary/#ASCII
-// constexpr bool unicode_is_ascii(char32_t value) noexcept
-// {
-//     return value < 0x80;
-// }
-
-// // https://unicode.org/glossary/#control_codes
-// constexpr bool unicode_is_cntrl(char32_t value) noexcept
-// {
-//     return value <= 0x1F || (value <= 0x9F && value >= 0x7F);
-// }
-
-// https://www.unicode.org/versions/Unicode15.0.0/ch03.pdf#page=19
-// constexpr bool unicode_is_code_point(char32_t value) noexcept
-// {
-//     return value <= 0x10FFFF;
-// }
 
 // See code point bit table:
 // https://en.wikipedia.org/wiki/UTF-8#Encoding
