@@ -1,17 +1,21 @@
 #ifndef HTL_DETAIL_JSON_H_
 #define HTL_DETAIL_JSON_H_
 
+#include <bit>
 #include <charconv>
 #include <climits>
+#include <cmath>
 #include <concepts>
 #include <cuchar>
 #include <functional>
+#include <iostream>
 #include <iterator>
 #include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 #include <cxxabi.h>
+#include <htl/ascii.h>
 #include <htl/detail/encoding.h>
 #include <htl/jsonfwd.h>
 
@@ -27,10 +31,68 @@ inline auto make_common_iterator(auto it)
     }
 }
 
+// https://www.unicode.org/versions/Unicode15.0.0/ch03.pdf#page=22
+inline bool unicode_is_code_point(char32_t value) noexcept
+{
+    return value <= 0x10FFFF;
+}
+
+// https://www.unicode.org/versions/Unicode15.0.0/ch03.pdf#page=49
+inline bool unicode_is_noncharacter(char32_t value) noexcept
+{
+    return (value >= 0xFDD0 && value <= 0xFDEF) ||
+           (value <= 0x10FFFF &&
+            ((value & 0xFFFF) == 0xFFFE || (value & 0xFFFF) == 0xFFFF));
+}
+
+// https://www.unicode.org/versions/Unicode15.0.0/ch03.pdf#page=49
+inline bool unicode_is_surrogate(char32_t value) noexcept
+{
+    return value >= 0xD800 && value <= 0xDFFF;
+}
+
+// https://www.unicode.org/versions/Unicode15.0.0/ch03.pdf#page=49
+inline bool unicode_is_high_surrogate(char32_t value) noexcept
+{
+    return value >= 0xD800 && value <= 0xDBFF;
+}
+
+// https://www.unicode.org/versions/Unicode15.0.0/ch03.pdf#page=49
+inline bool unicode_is_low_surrogate(char32_t value) noexcept
+{
+    return value >= 0xDC00 && value <= 0xDFFF;
+}
+
+// No check for invalid surrogates.
+inline char32_t unicode_surrogate_code_point(
+    char16_t high, char16_t low) noexcept
+{
+    return ((static_cast<char32_t>(high) - 0xD800) << 10) +
+           (static_cast<char32_t>(low) - 0xDC00) + 0x10000;
+}
+
+// // https://unicode.org/glossary/#ASCII
+// constexpr bool unicode_is_ascii(char32_t value) noexcept
+// {
+//     return value < 0x80;
+// }
+
+// // https://unicode.org/glossary/#control_codes
+// constexpr bool unicode_is_cntrl(char32_t value) noexcept
+// {
+//     return value <= 0x1F || (value <= 0x9F && value >= 0x7F);
+// }
+
+// https://www.unicode.org/versions/Unicode15.0.0/ch03.pdf#page=19
+// constexpr bool unicode_is_code_point(char32_t value) noexcept
+// {
+//     return value <= 0x10FFFF;
+// }
+
 // See code point bit table:
 // https://en.wikipedia.org/wiki/UTF-8#Encoding
 template <class I, class S>
-inline bool read_utf8_char(I &first, S &last, char32_t &code_point)
+inline bool read_utf8_char(I &&first, S &&last, char32_t &code_point)
 {
     if (first == last) {
         return false;
@@ -49,7 +111,8 @@ inline bool read_utf8_char(I &first, S &last, char32_t &code_point)
             return false;
         }
 
-        code_point = (static_cast<char32_t>(b1) << 6) | (b2 & 0x3F);
+        code_point = ((static_cast<char32_t>(b1) & 0x1F) << 6) |
+                     (static_cast<char32_t>(b2) & 0x3F);
     } else if ((b1 >> 4) == 0b1110) {
         char8_t b2 = *first;
 
@@ -64,8 +127,9 @@ inline bool read_utf8_char(I &first, S &last, char32_t &code_point)
         }
 
         code_point = //
-            (static_cast<char32_t>(b1) << 12) |
-            ((static_cast<char32_t>(b2) & 0x3F) << 6) | (b3 & 0x3F);
+            ((static_cast<char32_t>(b1) & 0x0F) << 12) |
+            ((static_cast<char32_t>(b2) & 0x3F) << 6) |
+            (static_cast<char32_t>(b3) & 0x3F);
     } else if ((b1 >> 3) == 0b11110) {
         char8_t b2 = *first;
 
@@ -86,9 +150,12 @@ inline bool read_utf8_char(I &first, S &last, char32_t &code_point)
         }
 
         code_point =
-            (static_cast<char32_t>(b1) << 18) |
+            ((static_cast<char32_t>(b1) & 0x07) << 18) |
             ((static_cast<char32_t>(b2) & 0x3F) << 12) |
-            ((static_cast<char32_t>(b3) & 0x3F) << 6) | (b4 & 0x3F);
+            ((static_cast<char32_t>(b3) & 0x3F) << 6) |
+            (static_cast<char32_t>(b4) & 0x3F);
+    } else {
+        return false;
     }
 
     ++first;
@@ -96,14 +163,14 @@ inline bool read_utf8_char(I &first, S &last, char32_t &code_point)
 }
 
 template <class O>
-inline void write_char8(O &out, char8_t c)
+inline void write_char8(O &&out, char8_t c)
 {
     *out = c;
     ++out;
 }
 
 template <class O>
-inline std::size_t write_utf8_char(O &out, char32_t code_point)
+inline std::size_t write_utf8_char(O &&out, char32_t code_point)
 {
     if (code_point > 0x10FFFF) {
         return 0;
@@ -150,6 +217,10 @@ public:
     Primitive() noexcept(noexcept(Alloc())) : _alloc(), _value() {}
 
     explicit Primitive(const Alloc &alloc) noexcept : _alloc(alloc), _value() {}
+
+    Primitive(std::nullptr_t, const Alloc &alloc) noexcept
+        : _alloc(alloc), _value()
+    {}
 
     Primitive(Bool value, const Alloc &alloc) noexcept
         : _alloc(alloc), _value(value)
@@ -280,20 +351,22 @@ struct ParseHandler {
     int column;
     ParseErrorCode code;
     ParseOptions opts;
-    BasicDocument<Alloc> value;
+    [[no_unique_address]] Alloc alloc;
 
     ParseHandler(I first, S last, const Alloc &parser_alloc,
                  const Alloc &value_alloc, const ParseOptions &opts)
         : first(std::move(first)), last(std::move(last)), stack(parser_alloc),
-          line(0), column(0), code(), opts(opts), value(value_alloc)
+          line(0), column(0), code(), opts(opts), alloc(value_alloc)
     {}
 
     ParseResult<I, BasicDocument<Alloc>> parse()
     {
+        BasicDocument<Alloc> value(alloc);
+
         start_document(value);
 
         while (!has_error() && stack.size()) {
-            if (stack.size() >= opts.max_depth) {
+            if (stack.size() > opts.max_depth) {
                 set_max_depth();
                 break;
             }
@@ -319,9 +392,32 @@ struct ParseHandler {
         return first == last;
     }
 
-    void next()
+    void skip()
     {
         ++first;
+        ++column;
+    }
+
+    char next()
+    {
+        char c = peek();
+        skip();
+        return c;
+    }
+
+    void newline()
+    {
+        ++line;
+        column = 0;
+    }
+
+    void expect_next(std::string_view s)
+    {
+        for (auto c: s) {
+            if (done() || c != next()) {
+                set_unexpected_token();
+            }
+        }
     }
 
     void start_document(BasicDocument<Alloc> &dest)
@@ -332,18 +428,17 @@ struct ParseHandler {
 
         switch (peek()) {
         case '{':
-            next();
+            skip();
             dest.emplace_object();
             stack.push_back(std::addressof(dest));
             break;
         case '[':
-            next();
+            skip();
             dest.emplace_array();
             stack.push_back(std::addressof(dest));
             break;
         case '"':
-            dest.emplace_string();
-            read_string(dest);
+            read_string(dest.emplace_string());
             break;
         case '-':
         case '0':
@@ -357,6 +452,18 @@ struct ParseHandler {
         case '8':
         case '9':
             read_number(dest);
+            break;
+        case 't':
+            expect_next("true");
+            dest.assign(true);
+            break;
+        case 'f':
+            expect_next("false");
+            dest.assign(false);
+            break;
+        case 'n':
+            expect_next("null");
+            dest.assign(nullptr);
             break;
         default:
             set_unexpected_token();
@@ -381,27 +488,31 @@ struct ParseHandler {
 
         switch (peek()) {
         case ']':
-            next();
+            skip();
             stack.pop_back();
             break;
         case ',':
-            next();
+            skip();
             if (consume_whitespace_and_comments()) {
-                return;
             } else if (peek() == ']') {
-                if (opts.allow_trailing_commas) {
+                if (opts.accept_trailing_commas && dest.size()) {
                     stack.pop_back();
                 } else {
                     set_unexpected_token();
                 }
-                return;
-            } else if (!dest.size()) {
+            } else if (dest.empty()) {
                 set_unexpected_token();
-                return;
+            } else {
+                start_document(dest.emplace_back());
             }
+            break;
 
         default:
-            start_document(dest.emplace_back());
+            if (dest.size()) {
+                set_unexpected_token();
+            } else {
+                start_document(dest.emplace_back());
+            }
             break;
         }
     }
@@ -414,56 +525,145 @@ struct ParseHandler {
 
         switch (peek()) {
         case '}':
-            next();
+            skip();
             stack.pop_back();
             break;
 
         case ',':
-            next();
-            if (consume_whitespace_and_comments()) {
-                return;
+            skip();
+            if (!dest.size()) {
+                set_unexpected_token();
+            } else if (consume_whitespace_and_comments()) {
             } else if (peek() == '}') {
-                if (opts.allow_trailing_commas) {
+                if (opts.accept_trailing_commas) {
+                    skip();
                     stack.pop_back();
                 } else {
                     set_unexpected_token();
                 }
-                return;
-            } else if (!dest.size() || peek() != '"') {
-                set_unexpected_token();
-                return;
+            } else {
+                start_entry(dest);
             }
+            break;
 
         case '"':
-            start_object_entry(dest);
+            start_entry(dest);
             break;
 
         default:
             set_unexpected_token();
-            return;
+            break;
         }
     }
 
-    void start_object_entry(BasicObject<Alloc> &dest)
+    void start_entry(BasicObject<Alloc> &dest)
     {
         Alloc alloc(dest.get_allocator());
-        BasicString<Alloc> key(BasicString<Alloc>::allocator_type(alloc));
+        BasicString<Alloc> key(alloc);
 
-        read_string(start_object_entry());
+        read_string(key);
         if (has_error() || consume_whitespace_and_comments()) {
             return;
-        } else if (peek() != ':') {
+        } else if (next() != ':') {
             set_unexpected_token();
             return;
         }
 
         auto [pos, inserted] = dest.try_emplace(std::move(key), alloc);
-        if (!opts.allow_duplicate_keys && !inserted) {
+        if (!opts.accept_duplicate_keys && !inserted) {
             set_duplicate_key();
             return;
         }
 
         start_document(pos->second);
+    }
+
+    void read_number(BasicDocument<Alloc> &dest)
+    {
+        using BufferAlloc =
+            typename std::allocator_traits<Alloc>::rebind_alloc<char>;
+        using BufferType =
+            std::basic_string<char, std::char_traits<char>, BufferAlloc>;
+
+        BufferType buf(BufferAlloc(stack.get_allocator()));
+        bool is_int = true;
+
+        if (!done() && peek() == '-') {
+            buf.push_back(next());
+        }
+
+        if (done() || !ascii_isdigit(peek())) {
+            set_unexpected_token();
+            return;
+        } else if (peek() == '0') {
+            buf.push_back(next());
+        } else {
+            while (!done() && ascii_isdigit(peek())) {
+                buf.push_back(next());
+            }
+        }
+
+        if (!done() && peek() == '.') {
+            is_int = false;
+            buf.push_back(next());
+
+            if (done() || !ascii_isdigit(peek())) {
+                set_unexpected_token();
+                return;
+            }
+
+            while (!done() && ascii_isdigit(peek())) {
+                buf.push_back(next());
+            }
+        }
+
+        if (!done() && (peek() == 'e' || peek() == 'E')) {
+            is_int = false;
+            buf.push_back(next());
+
+            if (done()) {
+                set_unexpected_token();
+                return;
+            } else if (peek() == '+' || peek() == '-') {
+                buf.push_back(next());
+            }
+
+            if (done() || !ascii_isdigit(peek())) {
+                set_unexpected_token();
+                return;
+            } else if (peek() == '0') {
+                buf.push_back(next());
+            } else {
+                while (!done() && ascii_isdigit(peek())) {
+                    buf.push_back(next());
+                }
+            }
+        }
+
+        const char *first = buf.data();
+        const char *last = first + buf.size();
+        std::from_chars_result result;
+
+        if (is_int) {
+            dest.assign(0);
+            result = std::from_chars(first, last, dest.get_int());
+        } else {
+            dest.assign(0.0);
+            result = std::from_chars(first, last, dest.get_float());
+        }
+
+        switch (result.ec) {
+        case std::errc::invalid_argument:
+            set_unexpected_token();
+            return;
+        case std::errc::result_out_of_range:
+            set_number_out_of_range();
+            return;
+        }
+
+        if (result.ptr != last) {
+            set_unexpected_token();
+        }
     }
 
     void read_string(BasicString<Alloc> &dest)
@@ -473,30 +673,165 @@ struct ParseHandler {
             return;
         }
 
-        next();
-        while (true) {
+        skip();
+        for (char32_t code_point; !has_error();) {
             if (done()) {
                 set_unexpected_token();
                 return;
+            } else if (!read_utf8_char(first, last, code_point)) {
+                set_invalid_encoding();
+                return;
             }
 
-            char c = peek();
-            unsigned char uc = c;
-            next();
-
-            if (c == '"') {
+            if (code_point == U'"') {
                 return;
-            } else if (c == '\\') {
-                read_string_escape(dest);
-            } else if (ascii_iscntrl(c)) {
+            } else if (code_point == U'\\') {
+                if (done()) {
+                    set_unexpected_token();
+                } else {
+                    while (read_escape(dest) && !has_error()) {
+                    }
+                }
+            } else if (code_point < 0x20) {
                 set_unexpected_token();
             } else {
-                dest.push_back(c);
+                append_code_point(dest, code_point);
             }
         }
     }
 
-    void read_string_escape(char c);
+    bool read_escape(BasicString<Alloc> &dest)
+    {
+        // std::cout << "read_escape(): " << std::to_address(first)
+        //           << ", peek(): " << peek() << "\n";
+
+        if (done()) {
+            set_unexpected_token();
+            return false;
+        }
+
+        switch (next()) {
+        case '"':
+            dest.push_back('"');
+            break;
+        case '\\':
+            dest.push_back('\\');
+            break;
+        case '/':
+            dest.push_back('/');
+            break;
+        case 'b':
+            dest.push_back('\b');
+            break;
+        case 'f':
+            dest.push_back('\f');
+            break;
+        case 'n':
+            dest.push_back('\n');
+            break;
+        case 'r':
+            dest.push_back('\r');
+            break;
+        case 't':
+            dest.push_back('\t');
+            break;
+        case 'u':
+            return read_unicode_escape(dest);
+        default:
+            // std::cout << "default\n";
+            set_invalid_escape();
+            break;
+        }
+
+        return false;
+    }
+
+    bool read_unicode_escape(BasicString<Alloc> &dest)
+    {
+        char32_t code_point = read_unicode_escape_hex();
+
+        if (has_error()) {
+            return false;
+        } else if (unicode_is_high_surrogate(code_point)) {
+            return read_low_surrogate(dest, code_point);
+        } else {
+            append_code_point(dest, code_point);
+        }
+
+        return false;
+    }
+
+    bool read_low_surrogate(BasicString<Alloc> &dest, char16_t high)
+    {
+        if (done()) {
+            set_unexpected_token();
+        } else if (peek() == '\\') {
+            skip();
+            if (done()) {
+                set_unexpected_token();
+            } else if (peek() == 'u') {
+                skip();
+
+                char16_t low = read_unicode_escape_hex();
+                if (has_error()) {
+                    return false;
+                } else if (unicode_is_low_surrogate(low)) {
+                    append_code_point(
+                        dest, unicode_surrogate_code_point(high, low));
+                } else {
+                    append_code_point(dest, high);
+                    if (!has_error()) {
+                        append_code_point(dest, low);
+                    }
+                }
+            } else {
+                append_code_point(dest, high);
+                return true;
+            }
+        } else {
+            append_code_point(dest, high);
+        }
+
+        return false;
+    }
+
+    void append_code_point(BasicString<Alloc> &dest, char32_t code_point)
+    {
+        if (unicode_is_surrogate(code_point) ||
+            unicode_is_noncharacter(code_point)) {
+            if (!opts.accept_invalid_code_points) {
+                set_invalid_escape();
+                return;
+            } else if (opts.replace_invalid_code_points) {
+                code_point = 0xFFFD;
+            }
+        }
+
+        write_utf8_char(std::back_inserter(dest), code_point);
+    }
+
+    char16_t read_unicode_escape_hex()
+    {
+        char16_t value{};
+
+        for (int i = 3; i >= 0; --i) {
+            if (done()) {
+                set_unexpected_token();
+                return {};
+            }
+
+            int v = htl::detail::hex_values[static_cast<unsigned char>(peek())];
+            if (v < 0) {
+                set_invalid_escape();
+                return {};
+            }
+
+            value |= v << (4 * i);
+            skip();
+        }
+
+        return value;
+    }
 
     bool consume_whitespace_and_comments()
     {
@@ -515,22 +850,22 @@ struct ParseHandler {
                 break;
 
             case '\r':
-                next();
+                skip();
                 if (!done() && peek() == '\n') {
-                    next();
+                    skip();
                 }
 
-                ++line;
+                newline();
                 break;
 
             case '\n':
-                ++line;
-                next();
+                newline();
+                skip();
                 break;
 
             case '\t':
             case ' ':
-                next();
+                skip();
                 break;
 
             default:
@@ -541,51 +876,51 @@ struct ParseHandler {
 
     void consume_comment()
     {
-        if (!opts.allow_comments || done() || peek() != '/') {
+        if (!opts.accept_comments || done() || peek() != '/') {
             set_unexpected_token();
             return;
         }
 
-        next();
+        skip();
         if (done() || (peek() != '/' && peek() != '*')) {
             set_unexpected_token();
             return;
         }
 
         bool single = peek() == '/';
-        next();
+        skip();
 
         while (!done()) {
             switch (peek()) {
             case '\r':
-                next();
+                skip();
                 if (!done() && peek() == '\n') {
-                    next();
+                    skip();
                 }
 
-                ++line;
+                newline();
                 if (single) {
                     return;
                 }
                 break;
 
             case '\n':
-                next();
-                ++line;
+                skip();
+                newline();
                 if (single) {
                     return;
                 }
                 break;
 
             case '*':
-                next();
+                skip();
                 if (!single && !done() && peek() == '/') {
                     return;
                 }
                 break;
 
             default:
-                next();
+                skip();
                 break;
             }
         }
@@ -614,6 +949,11 @@ struct ParseHandler {
     void set_duplicate_key()
     {
         code = ParseErrorCode::DuplicateKey;
+    }
+
+    void set_invalid_encoding()
+    {
+        code = ParseErrorCode::InvalidEncoding;
     }
 };
 
@@ -793,7 +1133,7 @@ struct SerializeHandler {
 
     bool write_escaped_character(char32_t code_point)
     {
-        if (code_point < 0x20 || code_point == 0x7F) {
+        if (code_point < 0x20) {
             write("\\u00");
             write(htl::detail::hex_charset_lower[code_point >> 4]);
             write(htl::detail::hex_charset_lower[code_point & 15]);

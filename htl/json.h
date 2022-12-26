@@ -24,6 +24,7 @@
 #include <utility>
 #include <vector>
 #include <htl/ascii.h>
+#include <htl/concepts.h>
 #include <htl/detail/json.h>
 #include <htl/jsonfwd.h>
 #include <htl/utility.h>
@@ -193,22 +194,22 @@ public:
 
     void assign(Null) noexcept
     {
-        _assign_primitive(nullptr);
+        _assign_primitive(nullptr, Type::Null);
     }
 
     void assign(Bool value) noexcept
     {
-        _assign_primitive(value);
+        _assign_primitive(value, Type::Bool);
     }
 
     void assign(std::integral auto value) noexcept
     {
-        _assign_primitive(value);
+        _assign_primitive(value, Type::Int);
     }
 
     void assign(std::floating_point auto value) noexcept
     {
-        _assign_primitive(value);
+        _assign_primitive(value, Type::Float);
     }
 
     void assign(const char *value)
@@ -257,7 +258,7 @@ public:
         auto prev = std::move(*this);
         try {
             _destroy_at_primitive();
-            _construct_at_string(_new<BasicString<String>>(
+            _construct_at_string(_new<BasicString<Alloc>>(
                 alloc, std::forward<decltype(args)>(args)...,
                 StringAlloc(alloc)));
             _type = Type::String;
@@ -274,7 +275,7 @@ public:
         auto prev = std::move(*this);
         try {
             _destroy_at_primitive();
-            _construct_at_array(_new<BasicArray<Array>>(
+            _construct_at_array(_new<BasicArray<Alloc>>(
                 alloc, std::forward<decltype(args)>(args)...,
                 ArrayAlloc(alloc)));
             _type = Type::Array;
@@ -291,7 +292,7 @@ public:
         auto prev = std::move(*this);
         try {
             _destroy_at_primitive();
-            _construct_at_object(_new<BasicObject<Object>>(
+            _construct_at_object(_new<BasicObject<Alloc>>(
                 alloc, std::forward<decltype(args)>(args)...,
                 ObjectAlloc(alloc)));
             _type = Type::Object;
@@ -500,17 +501,17 @@ public:
             case Type::Null:
                 return true;
             case Type::Bool:
-                return a.is_bool() == b.is_bool();
+                return a.get_bool() == b.get_bool();
             case Type::Int:
-                return a.is_int() == b.is_int();
+                return a.get_int() == b.get_int();
             case Type::Float:
-                return a.is_float() == b.is_float();
+                return a.get_float() == b.get_float();
             case Type::String:
-                return a.is_string() == b.is_string();
+                return a.get_string() == b.get_string();
             case Type::Array:
-                return a.is_array() == b.is_array();
+                return a.get_array() == b.get_array();
             case Type::Object:
-                return a.is_object() == b.is_object();
+                return a.get_object() == b.get_object();
             }
         }
 
@@ -763,7 +764,7 @@ private:
         }
     }
 
-    void _assign_primitive(auto value) noexcept
+    void _assign_primitive(auto value, Type new_type) noexcept
     {
         switch (_type) {
         case Type::Null:
@@ -782,6 +783,8 @@ private:
             _construct_at_primitive(value, _release_object());
             break;
         }
+
+        _type = new_type;
     }
 
     void _assign_string(auto &&value)
@@ -1182,8 +1185,7 @@ public:
         _base.swap(other._base);
     }
 
-    friend bool operator==(const BasicArray &a, const BasicArray &b) noexcept =
-        default;
+    friend bool operator==(const BasicArray &a, const BasicArray &b) = default;
 
     friend void swap(BasicArray &a, BasicArray &b) noexcept(noexcept(a.swap(b)))
     {
@@ -1584,8 +1586,8 @@ public:
         return _base.reserve(n);
     }
 
-    friend bool operator==(
-        const BasicObject &a, const BasicObject &b) noexcept = default;
+    friend bool operator==(const BasicObject &a, const BasicObject &b) =
+        default;
 
     friend void swap(BasicObject &a, BasicObject &b) //
         noexcept(noexcept(a.swap(b)))
@@ -1644,12 +1646,12 @@ public:
         : _base(std::move(other), pos, n, BaseAlloc(alloc))
     {}
 
-    template <class T>
+    template <StringViewLike T>
     explicit BasicString(const T &value, const Alloc &alloc = Alloc())
         : _base(value, BaseAlloc(alloc))
     {}
 
-    template <class T>
+    template <StringViewLike T>
     BasicString(const T &value, size_type pos, size_type n,
                 const Alloc &alloc = Alloc())
         : _base(value, pos, n, BaseAlloc(alloc))
@@ -1702,7 +1704,7 @@ public:
                  std::allocator_traits<Alloc>::
                      propagate_on_container_move_assignment::value) = default;
 
-    template <class T>
+    template <StringViewLike T>
     BasicString &operator=(const T &value)
     {
         _base = value;
@@ -1885,7 +1887,7 @@ public:
         return *this;
     }
 
-    template <class T>
+    template <StringViewLike T>
     BasicString &operator+=(const T &value)
     {
         _base += value;
@@ -1923,14 +1925,14 @@ public:
         return *this;
     }
 
-    template <class T>
+    template <StringViewLike T>
     BasicString &append(const T &value)
     {
         _base.append(value);
         return *this;
     }
 
-    template <class T>
+    template <StringViewLike T>
     BasicString &append(const T &value, size_type pos, size_type n = npos)
     {
         _base.append(value, pos, n);
@@ -1996,14 +1998,14 @@ public:
         return *this;
     }
 
-    template <class T>
+    template <StringViewLike T>
     BasicString &assign(const T &value)
     {
         _base.assign(value);
         return *this;
     }
 
-    template <class T>
+    template <StringViewLike T>
     BasicString &assign(const T &value, size_type pos, size_type n = npos)
     {
         _base.assign(value, pos, n);
@@ -2055,14 +2057,14 @@ public:
         return *this;
     }
 
-    template <class T>
+    template <StringViewLike T>
     BasicString &insert(size_type pos, const T &value)
     {
         _base.insert(pos, value);
         return *this;
     }
 
-    template <class T>
+    template <StringViewLike T>
     BasicString &
     insert(size_type pos1, const T &value, size_type pos2, size_type n = npos)
     {
@@ -2145,14 +2147,14 @@ public:
         return *this;
     }
 
-    template <class T>
+    template <StringViewLike T>
     BasicString &replace(size_type pos1, size_type n1, const T &value)
     {
         _base.replace(pos1, n1, value);
         return *this;
     }
 
-    template <class T>
+    template <StringViewLike T>
     BasicString &replace(size_type pos1, size_type n1, const T &value,
                          size_type pos2, size_type n2 = npos)
     {
@@ -2186,7 +2188,7 @@ public:
         return *this;
     }
 
-    template <class T>
+    template <StringViewLike T>
     BasicString &
     replace(const_iterator first, const_iterator last, const T &value)
     {
@@ -2271,7 +2273,7 @@ public:
         return Alloc(_base.get_allocator());
     }
 
-    template <class T>
+    template <StringViewLike T>
     size_type find(const T &value, size_type pos = 0) const
         noexcept(std::is_nothrow_convertible_v<const T &, std::string_view>)
     {
@@ -2298,7 +2300,7 @@ public:
         return _base.find(c, pos);
     }
 
-    template <class T>
+    template <StringViewLike T>
     size_type rfind(const T &value, size_type pos = npos) const
         noexcept(std::is_nothrow_convertible_v<const T &, std::string_view>)
     {
@@ -2326,7 +2328,7 @@ public:
         return _base.rfind(c, pos);
     }
 
-    template <class T>
+    template <StringViewLike T>
     size_type find_first_of(const T &value, size_type pos = 0) const
         noexcept(std::is_nothrow_convertible_v<const T &, std::string_view>)
     {
@@ -2354,7 +2356,7 @@ public:
         return _base.find_first_of(c, pos);
     }
 
-    template <class T>
+    template <StringViewLike T>
     size_type find_last_of(const T &value, size_type pos = npos) const
         noexcept(std::is_nothrow_convertible_v<const T &, std::string_view>)
     {
@@ -2382,7 +2384,7 @@ public:
         return _base.find_last_of(c, pos);
     }
 
-    template <class T>
+    template <StringViewLike T>
     size_type find_first_not_of(const T &value, size_type pos = 0) const
         noexcept(std::is_nothrow_convertible_v<const T &, std::string_view>)
     {
@@ -2411,7 +2413,7 @@ public:
         return _base.find_first_not_of(c, pos);
     }
 
-    template <class T>
+    template <StringViewLike T>
     size_type find_last_not_of(const T &value, size_type pos = npos) const
         noexcept(std::is_nothrow_convertible_v<const T &, std::string_view>)
     {
@@ -2450,20 +2452,20 @@ public:
         return std::move(_base).substr(pos, n);
     }
 
-    template <class T>
+    template <StringViewLike T>
     int compare(const T &value) const
         noexcept(std::is_nothrow_convertible_v<const T &, std::string_view>)
     {
         return _base.compare(value);
     }
 
-    template <class T>
+    template <StringViewLike T>
     int compare(size_type pos1, size_type n1, const T &value) const
     {
         return _base.compare(pos1, n1, value);
     }
 
-    template <class T>
+    template <StringViewLike T>
     int compare(size_type pos1, size_type n1, const T &value, size_type pos2,
                 size_type n2 = npos) const
     {
@@ -2547,25 +2549,97 @@ public:
         return _base.ends_with(value);
     }
 
-    friend bool operator==(
-        const BasicString &a, const BasicString &b) noexcept = default;
+    friend bool operator==(const BasicString &a, const BasicString &b) =
+        default;
+
+    friend bool operator==(const BasicString &a, const char *b)
+    {
+        return a._base == b;
+    }
 
     friend std::strong_ordering operator<=>(
-        const BasicString &a, const BasicString &b) noexcept = default;
+        const BasicString &a, const BasicString &b) = default;
+
+    friend std::strong_ordering operator<=>(const BasicString &a, const char *b)
+    {
+        return a._base <=> b;
+    }
 
     friend void swap(BasicString &a, BasicString &b) //
         noexcept(noexcept(a.swap(b)))
     {
         a.swap(b);
     }
+
+    BasicString operator+(const BasicString &a, const BasicString &b)
+    {
+        return a._base + b._base;
+    }
+
+    BasicString operator+(const BasicString &a, const char *b)
+    {
+        return a._base + b;
+    }
+
+    BasicString operator+(const char *a, const BasicString &b)
+    {
+        return a + b._base;
+    }
+
+    BasicString operator+(const BasicString &a, char b)
+    {
+        return a._base + b;
+    }
+
+    BasicString operator+(char a, const BasicString &b)
+    {
+        return a + b._base;
+    }
+
+    BasicString operator+(BasicString &&a, BasicString &&b)
+    {
+        return std::move(a._base) + std::move(b._base);
+    }
+
+    BasicString operator+(BasicString &&a, const BasicString &b)
+    {
+        return std::move(a._base) + b._base;
+    }
+
+    BasicString operator+(const BasicString &a, BasicString &&b)
+    {
+        return a._base + std::move(b._base);
+    }
+
+    BasicString operator+(BasicString &&a, const char *b)
+    {
+        return std::move(a._base) + b;
+    }
+
+    BasicString operator+(const char *a, BasicString &&b)
+    {
+        return a + std::move(b._base);
+    }
+
+    BasicString operator+(BasicString &&a, char b)
+    {
+        return std::move(a._base) + b;
+    }
+
+    BasicString operator+(char a, BasicString &&b)
+    {
+        return a + std::move(b._base);
+    }
+
+private:
+    BasicString(Base &&value) noexcept : _base(std::move(value)) {}
 };
 
 struct ParseError {
 public:
     ParseError() noexcept : ParseError(ParseErrorCode()) {}
 
-    explicit ParseError(ParseErrorCode code, int line = -1,
-                        int column = -1) noexcept
+    ParseError(ParseErrorCode code, int line = -1, int column = -1) noexcept
         : _code(code), _line(line), _column(column)
     {}
 
@@ -2584,7 +2658,27 @@ public:
         return _column;
     }
 
-    std::string_view message() const noexcept;
+    std::string_view message() const noexcept
+    {
+        switch (_code) {
+        case ParseErrorCode::None:
+            return "none";
+        case ParseErrorCode::UnexpectedToken:
+            return "unexpected token";
+        case ParseErrorCode::InvalidEscape:
+            return "invalid escape";
+        case ParseErrorCode::InvalidEncoding:
+            return "invalid encoding";
+        case ParseErrorCode::MaxDepth:
+            return "max depth reached";
+        case ParseErrorCode::NumberOutOfRange:
+            return "number out of range";
+        case ParseErrorCode::DuplicateKey:
+            return "duplicate key";
+        default:
+            return {};
+        }
+    }
 
     explicit operator bool() const noexcept
     {
@@ -2643,12 +2737,31 @@ public:
     }
 
     template <std::input_iterator I, std::sentinel_for<I> S>
-    ParseResult<I, BasicDocument<Alloc>>
-    parse(I first, S last, const Alloc &alloc = Alloc());
+    ParseResult<I, BasicDocument<Alloc>> parse(I first, S last)
+    {
+        return parse(std::move(first), std::move(last), _alloc);
+    }
 
     template <std::ranges::input_range R>
     ParseResult<std::ranges::borrowed_iterator_t<R>, BasicDocument<Alloc>>
-    parse(R &&r, const Alloc &alloc = Alloc())
+    parse(R &&r)
+    {
+        return parse(std::ranges::begin(r), std::ranges::end(r));
+    }
+
+    template <std::input_iterator I, std::sentinel_for<I> S>
+    ParseResult<I, BasicDocument<Alloc>>
+    parse(I first, S last, const Alloc &alloc)
+    {
+        detail::ParseHandler<I, S, Alloc> handler(
+            std::move(first), std::move(last), _alloc, alloc, _opts);
+
+        return handler.parse();
+    }
+
+    template <std::ranges::input_range R>
+    ParseResult<std::ranges::borrowed_iterator_t<R>, BasicDocument<Alloc>>
+    parse(R &&r, const Alloc &alloc)
     {
         return parse(std::ranges::begin(r), std::ranges::end(r), alloc);
     }
@@ -2657,6 +2770,39 @@ private:
     [[no_unique_address]] Alloc _alloc;
     ParseOptions _opts;
 };
+
+template <std::input_iterator I, std::sentinel_for<I> S, class Alloc>
+    requires(!std::same_as<Alloc, ParseOptions>)
+inline ParseResult<I, BasicDocument<Alloc>> parse(
+    I first, S last, const Alloc &alloc)
+{
+    return parse(std::move(first), std::move(last), {}, alloc);
+}
+
+template <std::input_iterator I, std::sentinel_for<I> S,
+          class Alloc = std::allocator<std::byte>>
+inline ParseResult<I, BasicDocument<Alloc>> parse(
+    I first, S last, const ParseOptions &opts = ParseOptions(),
+    const Alloc &alloc = Alloc())
+{
+    return BasicParser(opts, alloc).parse(std::move(first), std::move(last));
+}
+
+template <std::ranges::input_range R, class Alloc>
+    requires(!std::same_as<Alloc, ParseOptions>)
+inline ParseResult<std::ranges::borrowed_iterator_t<R>,
+                   BasicDocument<Alloc>> parse(R &&r, const Alloc &alloc)
+{
+    return parse(std::forward<R>(r), {}, alloc);
+}
+
+template <std::ranges::input_range R, class Alloc = std::allocator<std::byte>>
+inline ParseResult<std::ranges::borrowed_iterator_t<R>, BasicDocument<Alloc>>
+parse(R &&r, const ParseOptions &opts = ParseOptions(),
+      const Alloc &alloc = Alloc())
+{
+    return parse(std::ranges::begin(r), std::ranges::end(r), opts, alloc);
+}
 
 template <class Alloc>
 class BasicSerializer {
@@ -2778,8 +2924,7 @@ inline O serialize(
 }
 
 template <class Alloc, std::output_iterator<char> O>
-inline O serialize(std::floating_point auto value, O out,
-                   const Alloc &alloc = Alloc())
+inline O serialize(std::floating_point auto value, O out, const Alloc &alloc)
 {
     return BasicSerializer(alloc).serialize(value, std::move(out));
 }

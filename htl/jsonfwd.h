@@ -69,8 +69,10 @@ using Serializer = BasicSerializer<std::pmr::polymorphic_allocator<std::byte>>;
 } // namespace pmr
 
 enum class ParseErrorCode {
-    UnexpectedToken = 1,
+    None,
+    UnexpectedToken,
     InvalidEscape,
+    InvalidEncoding,
     MaxDepth,
     NumberOutOfRange,
     DuplicateKey,
@@ -78,10 +80,11 @@ enum class ParseErrorCode {
 
 struct ParseOptions {
     std::size_t max_depth = std::numeric_limits<std::size_t>::max();
-    bool replace_invalid_code_points = false;
-    bool allow_trailing_commas = false;
-    bool allow_comments = false;
-    bool allow_duplicate_keys = false;
+    bool replace_invalid_code_points = true;
+    bool accept_invalid_code_points = true;
+    bool accept_trailing_commas = false;
+    bool accept_comments = false;
+    bool accept_duplicate_keys = false;
 };
 
 struct ParseError;

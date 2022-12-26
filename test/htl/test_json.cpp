@@ -1,17 +1,11 @@
+#include <string_view>
+#include <utility>
 #include <gtest/gtest.h>
 #include <htl/json.h>
 #include <htl/utility.h>
-#include "./util/allocator.h"
+#include "./test_json.h"
 
 namespace htl::test {
-
-using namespace htl::json;
-
-using TestAlloc = IdentityAllocator<std::byte>;
-using TestDocument = BasicDocument<IdentityAllocator<std::byte>>;
-using TestString = BasicString<IdentityAllocator<std::byte>>;
-using TestArray = BasicArray<IdentityAllocator<std::byte>>;
-using TestObject = BasicObject<IdentityAllocator<std::byte>>;
 
 TEST(JSONTest, DocumentDefaultContructor)
 {
@@ -274,5 +268,44 @@ TEST(JSONTest, DocumentObjectAllocatorExtendedMoveConstructor)
 // TEST(JSONTest, DocumentAllocatorExtendedMoveConstructor)
 // {
 // }
+
+TEST(JSONTest, Parse)
+{
+    TestAlloc alloc(1);
+
+    for (auto &test_case: parse_success_cases) {
+        auto result = parse(test_case.input, test_case.opts, alloc);
+
+        ASSERT_FALSE(result.error)
+            << "Name: " << test_case.name << "\n"
+            << "Error: " << result.error.message() << "\n"
+            << "Input: " << test_case.input << "\n"
+            << "Expected Value: " << test_case.value << "\n"
+            << "Recieved Value: " << result.value << "\n"
+            << "Expected Remaining" << test_case.remaining << "\n"
+            << "Recieved Remaining" << std::to_address(result.in) << "\n";
+
+        ASSERT_EQ(result.value, test_case.value)
+            << "Name: " << test_case.name << "\n"
+            << "Error: " << result.error.message() << "\n"
+            << "Input: " << test_case.input << "\n"
+            << "Expected Value: " << test_case.value << "\n"
+            << "Recieved Value: " << result.value << "\n"
+            << "Expected Remaining: " << test_case.remaining << "\n"
+            << "Recieved Remaining: " << std::to_address(result.in) << "\n";
+
+        ASSERT_EQ(result.value.get_allocator(), alloc);
+    }
+
+    for (auto &test_case: parse_fail_cases) {
+        auto result = parse(test_case.input, test_case.opts, alloc);
+
+        ASSERT_EQ(result.error.code(), test_case.code)
+            << "Name: " << test_case.name << "\n"
+            << "Input: " << test_case.input << "\n"
+            << "Expected Code: " << ParseError(test_case.code).message() << "\n"
+            << "Recieved Code: " << result.error.message() << "\n";
+    }
+}
 
 } // namespace htl::test
