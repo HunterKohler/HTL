@@ -1,11 +1,9 @@
 SHELL = bash
-OS = $(shell uname)
 
 GCOV ?= gcov
 LCOV ?= lcov
 CMAKE ?= cmake
 GENHTML ?= genhtml
-OPEN ?= $(if OS == "Darwin",open,xdg-open)
 
 GTEST_REPO = https://github.com/google/googletest.git
 GTEST_LIB = ./build/lib/libgtest.a
@@ -94,10 +92,9 @@ test: $(TEST_BIN)
 		$(COVERAGE_INFO)
 
 coverage: | test
-	@ $(OPEN) ./build/coverage/test/index.html
 
 docs:
-	@ doxygen .
+	@ doxygen
 
 deps: $(GTEST)
 
