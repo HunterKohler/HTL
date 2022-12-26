@@ -2571,62 +2571,62 @@ public:
         a.swap(b);
     }
 
-    BasicString operator+(const BasicString &a, const BasicString &b)
+    friend BasicString operator+(const BasicString &a, const BasicString &b)
     {
         return a._base + b._base;
     }
 
-    BasicString operator+(const BasicString &a, const char *b)
+    friend BasicString operator+(const BasicString &a, const char *b)
     {
         return a._base + b;
     }
 
-    BasicString operator+(const char *a, const BasicString &b)
+    friend BasicString operator+(const char *a, const BasicString &b)
     {
         return a + b._base;
     }
 
-    BasicString operator+(const BasicString &a, char b)
+    friend BasicString operator+(const BasicString &a, char b)
     {
         return a._base + b;
     }
 
-    BasicString operator+(char a, const BasicString &b)
+    friend BasicString operator+(char a, const BasicString &b)
     {
         return a + b._base;
     }
 
-    BasicString operator+(BasicString &&a, BasicString &&b)
+    friend BasicString operator+(BasicString &&a, BasicString &&b)
     {
         return std::move(a._base) + std::move(b._base);
     }
 
-    BasicString operator+(BasicString &&a, const BasicString &b)
+    friend BasicString operator+(BasicString &&a, const BasicString &b)
     {
         return std::move(a._base) + b._base;
     }
 
-    BasicString operator+(const BasicString &a, BasicString &&b)
+    friend BasicString operator+(const BasicString &a, BasicString &&b)
     {
         return a._base + std::move(b._base);
     }
 
-    BasicString operator+(BasicString &&a, const char *b)
+    friend BasicString operator+(BasicString &&a, const char *b)
     {
         return std::move(a._base) + b;
     }
 
-    BasicString operator+(const char *a, BasicString &&b)
+    friend BasicString operator+(const char *a, BasicString &&b)
     {
         return a + std::move(b._base);
     }
 
-    BasicString operator+(BasicString &&a, char b)
+    friend BasicString operator+(BasicString &&a, char b)
     {
         return std::move(a._base) + b;
     }
 
-    BasicString operator+(char a, BasicString &&b)
+    friend BasicString operator+(char a, BasicString &&b)
     {
         return a + std::move(b._base);
     }
