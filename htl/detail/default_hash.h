@@ -32,8 +32,9 @@ public:
         requires std::has_unique_object_representations_v<T>
     auto &update(const T &value) noexcept
     {
-        _base.update(reinterpret_cast<const std::byte *>(std::addressof(value)),
-                     sizeof(value));
+        _base.update(
+            reinterpret_cast<const std::uint8_t *>(std::addressof(value)),
+            sizeof(value));
         return *this;
     }
 
@@ -74,10 +75,10 @@ public:
 };
 
 template <class... Args>
-    requires(std::has_unique_object_representations<Args> && ...)
+    requires(std::has_unique_object_representations_v<Args> && ...)
 inline std::size_t default_hash(const Args &...args) noexcept
 {
-    DefaultHasher hash();
+    DefaultHasher hash;
     (hash.update(args), ...);
     return hash.digest();
 }
