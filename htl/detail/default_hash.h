@@ -3,15 +3,12 @@
 
 #include <concepts>
 #include <cstddef>
+#include <ranges>
+#include <span>
 #include <htl/siphash.h>
 #include <htl/unaligned.h>
 
 namespace htl::detail {
-
-template <class T>
-inline constexpr bool can_default_hash =
-    std::is_trivially_copyable_v<std::remove_reference_t<T>> &&
-    std::has_unique_object_representations_v<std::remove_reference_t<T>>;
 
 class DefaultHasher {
 private:
@@ -22,27 +19,49 @@ private:
 
     SipHash _base;
 
-    template <class T>
-    void _update_one(T &&value) noexcept
-    {
-        _base.update(
-            reinterpret_cast<const std::uint8_t *>(std::addressof(value)),
-            sizeof(std::remove_reference_t<T>));
-    }
-
 public:
     DefaultHasher() noexcept : _base(siphash_key) {}
 
-    void reset() noexcept
+    auto &reset() noexcept
     {
         _base.reset(siphash_key);
+        return *this;
     }
 
-    template <class... Args>
-        requires(can_default_hash<Args> && ...)
-    DefaultHasher &update(Args &&...args) noexcept
+    template <class T>
+        requires std::has_unique_object_representations_v<T>
+    auto &update(const T &value) noexcept
     {
-        (_update_one(std::forward<Args>(args)), ...);
+        _base.update(reinterpret_cast<const std::byte *>(std::addressof(value)),
+                     sizeof(value));
+        return *this;
+    }
+
+    template <std::ranges::input_range R>
+        requires std::has_unique_object_representations_v<
+            std::ranges::range_value_t<R>>
+    auto &update_range(R &&r)
+    {
+        return update_range(std::ranges::begin(r), std::ranges::end(r));
+    }
+
+    template <std::input_iterator I, std::sentinel_for<I> S>
+        requires std::has_unique_object_representations_v<std::iter_value_t<I>>
+    auto &update_range(I first, S last)
+    {
+        if constexpr (std::contiguous_iterator<I> &&
+                      std::sized_sentinel_for<S, I>) {
+            _base.update(
+                reinterpret_cast<const std::byte *>(std::addressof(*first)),
+                sizeof(std::iter_value_t<I>) *
+                    std::ranges::distance(first, last));
+        } else {
+            for (; first != last; ++first) {
+                decltype(auto) value = *first;
+                update(value);
+            }
+        }
+
         return *this;
     }
 
@@ -55,10 +74,12 @@ public:
 };
 
 template <class... Args>
-    requires(can_default_hash<Args> && ...)
-inline std::size_t default_hash(Args &&...args) noexcept
+    requires(std::has_unique_object_representations<Args> && ...)
+inline std::size_t default_hash(const Args &...args) noexcept
 {
-    return DefaultHasher().update(std::forward<Args>(args)...).digest();
+    DefaultHasher hash();
+    (hash.update(args), ...);
+    return hash.digest();
 }
 
 } // namespace htl::detail

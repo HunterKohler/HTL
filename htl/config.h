@@ -35,6 +35,20 @@
 #define HTL_ATTR_PACKED
 #endif
 
+#if defined(_WIN16) || defined(_WIN32) || defined(_WIN64) || \
+    defined(__WIN32__) || defined(__TOS_WIN__) || defined(__WINDOWS__)
+#define HTL_WINDOWS 1
+#else
+#define HTL_WINDOWS 0
+#endif
+
+#if defined(__SIZEOF_INT128__) && \
+    ((HTL_CLANG && !HTL_WINDOWS) || (HTL_GCC && !HTL_CLANG))
+#define HTL_HAS_INTRINSIC_INT128 1
+#elif
+#define HTL_HAS_INTRINSIC_INT128 0
+#endif
+
 /**
  * HTL namespace
  */
