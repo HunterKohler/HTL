@@ -21,6 +21,7 @@ AlwaysBreakAfterDefinitionReturnType: None
 AlwaysBreakAfterReturnType: None
 AlwaysBreakBeforeMultilineStrings: false
 AlwaysBreakTemplateDeclarations: Yes
+# AttributeBreakingStyle: Always
 AttributeMacros: []
 # BasedOnStyle:
 BinPackArguments: true
