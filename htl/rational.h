@@ -357,8 +357,8 @@ template <class T>
 struct hash<htl::Rational<T>> {
     std::size_t operator()(const htl::Rational<T> &value) noexcept
     {
-        auto norm = value.normalize();
-        return htl::detail::default_hash(norm.numer(), norm.denom());
+        auto n = value.normalize();
+        return htl::detail::default_hash(n.numer(), n.denom());
     }
 };
 

@@ -21,6 +21,8 @@
 #include <htl/rational.h>
 #include <htl/scope_guard.h>
 #include <htl/siphash.h>
+#include <htl/to_chars.h>
+#include <htl/to_string.h>
 #include <htl/tribool.h>
 #include <htl/type_traits.h>
 #include <htl/unaligned.h>

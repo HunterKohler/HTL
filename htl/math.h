@@ -1,10 +1,7 @@
 #ifndef HTL_MATH_H_
 #define HTL_MATH_H_
 
-#include <concepts>
-#include <limits>
 #include <type_traits>
-#include <utility>
 
 namespace htl {
 
