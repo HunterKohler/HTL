@@ -97,6 +97,11 @@ concept TimedLockable = requires(
     { t.try_lock_until(time) } -> BooleanTestable;
 };
 
+template <class T>
+concept StringViewLike =
+    std::is_convertible_v<const T &, std::string_view> &&
+    !std::is_convertible_v<const T &, const char *>;
+
 } // namespace htl
 
 #endif

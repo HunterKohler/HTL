@@ -27,6 +27,9 @@ TEST_SRC = $(shell find test/htl -type f -name '*.cpp')
 TEST_OBJ = $(patsubst %.cpp,build/obj/%.o,$(TEST_SRC))
 TEST_BIN = build/bin/test
 
+COVERAGE_DIR = build/coverage
+COVERAGE_INFO = $(COVERAGE_DIR)/test.info
+
 # Interesting flags to consider:
 # -fanalyzer
 # -fverbose-asm
@@ -43,7 +46,9 @@ CXXFLAGS += \
 	-Wunreachable-code \
 	-Wpointer-arith \
 	-Warray-bounds \
-	-Wno-sign-compare
+	-Wno-sign-compare \
+	-Wno-switch \
+	-Wno-implicit-fallthrough
 
 LDFLAGS =
 LDLIBS =
@@ -56,30 +61,35 @@ export CXXFLAGS
 export LDFLAGS
 export LDLIBS
 
-.PHONY: all lib test clean coverage
+.PHONY: all lib test clean coverage deps
 
-all: $(LIB) $(TEST_BIN)
+all: $(LIB)
 
 lib: $(LIB)
 
 test: $(TEST_BIN)
-	$< $(TEST_FLAGS)
-	@ mkdir -p ./build/coverage
-	@ $(RM) -r ./build/coverage/test.info ./build/coverage/test
-	@ $(LCOV) --quiet \
+	@ $< $(TEST_FLAGS)
+	@ mkdir -p $(COVERAGE_DIR)
+	@ $(RM) -r $(COVERAGE_INFO) ./build/coverage/test
+	@ $(LCOV) \
+		--quiet \
 		--capture \
 		--gcov-tool $(GCOV) \
-		--directory ./htl \
-		--directory ./build/obj/htl \
-		--directory ./build/obj/test \
-		--output-file ./build/coverage/test.info \
+		--base-directory . \
+		--directory . \
 		--no-external \
+		--output-file $(COVERAGE_INFO) \
 		--config-file ./.lcovrc
+	@ $(LCOV) \
+		--quiet \
+		--remove $(COVERAGE_INFO) "*/test/*" \
+		--remove $(COVERAGE_INFO) "*/gtest/*" \
+		--output-file $(COVERAGE_INFO)
 	@ $(GENHTML) \
 		--quiet \
 		--config-file ./.lcovrc \
 		--output-directory ./build/coverage/test  \
-		./build/coverage/test.info
+		$(COVERAGE_INFO)
 
 coverage: | test
 

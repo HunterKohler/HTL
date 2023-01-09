@@ -10,10 +10,13 @@
 #include <htl/detail/concepts.h>
 #include <htl/detail/default_hash.h>
 #include <htl/detail/encoding.h>
+#include <htl/detail/json.h>
 #include <htl/detail/md4_state.h>
 #include <htl/detail/md5_state.h>
 #include <htl/detail/mdx_hash.h>
 #include <htl/detail/type_traits.h>
+#include <htl/json.h>
+#include <htl/jsonfwd.h>
 #include <htl/math.h>
 #include <htl/md2.h>
 #include <htl/md4.h>
