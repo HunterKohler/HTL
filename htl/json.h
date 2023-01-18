@@ -192,64 +192,76 @@ public:
         return *this;
     }
 
-    void assign(Null) noexcept
+    BasicDocument &operator=(Null) noexcept
     {
         _assign_primitive(nullptr, Type::Null);
+        return *this;
     }
 
-    void assign(Bool value) noexcept
+    BasicDocument &operator=(Bool value) noexcept
     {
         _assign_primitive(value, Type::Bool);
+        return *this;
     }
 
-    void assign(std::integral auto value) noexcept
+    BasicDocument &operator=(std::integral auto value) noexcept
     {
         _assign_primitive(value, Type::Int);
+        return *this;
     }
 
-    void assign(std::floating_point auto value) noexcept
+    BasicDocument &operator=(std::floating_point auto value) noexcept
     {
         _assign_primitive(value, Type::Float);
+        return *this;
     }
 
-    void assign(const char *value)
+    BasicDocument &operator=(const char *value)
     {
         _assign_string(value);
+        return *this;
     }
 
-    void assign(std::string_view value)
+    BasicDocument &operator=(std::string_view value)
     {
         _assign_string(value);
+        return *this;
     }
 
-    void assign(const BasicString<Alloc> &value)
+    BasicDocument &operator=(const BasicString<Alloc> &value)
     {
         _assign_string(value);
+        return *this;
     }
 
-    void assign(const BasicArray<Alloc> &value)
+    BasicDocument &operator=(const BasicArray<Alloc> &value)
     {
         _assign_array(value);
+        return *this;
     }
 
-    void assign(const BasicObject<Alloc> &value)
+    BasicDocument &operator=(const BasicObject<Alloc> &value)
     {
         _assign_object(value);
+        return *this;
     }
 
-    void assign(BasicString<Alloc> &&value)
+    BasicDocument &operator=(BasicString<Alloc> &&value)
     {
         _assign_string(std::move(value));
+        return *this;
     }
 
-    void assign(BasicArray<Alloc> &&value)
+    BasicDocument &operator=(BasicArray<Alloc> &&value)
     {
         _assign_array(std::move(value));
+        return *this;
     }
 
-    void assign(BasicObject<Alloc> &&value)
+    BasicDocument &operator=(BasicObject<Alloc> &&value)
     {
         _assign_object(std::move(value));
+        return *this;
     }
 
     BasicString<Alloc> &emplace_string(auto &&...args)
@@ -771,7 +783,7 @@ private:
         case Type::Int:
         case Type::Bool:
         case Type::Float:
-            _primitive.assign(value);
+            _primitive = value;
             break;
         case Type::String:
             _construct_at_primitive(value, _release_string());
@@ -2726,6 +2738,49 @@ public:
         : _alloc(alloc), _opts(opts)
     {}
 
+    BasicParser(const BasicParser &other) noexcept
+        : BasicParser(
+              other,
+              std::allocator_traits<
+                  Alloc>::select_on_container_copy_construction(other._alloc))
+    {}
+
+    BasicParser(const BasicParser &other, const Alloc &alloc) noexcept
+        : _alloc(alloc), _opts(other._opts)
+    {}
+
+    BasicParser(BasicParser &&other) noexcept
+        : _alloc(std::move(other._alloc)), _opts(other._opts)
+    {}
+
+    BasicParser(BasicParser &&other, const Alloc &alloc) noexcept
+        : _alloc(alloc), _opts(other._opts)
+    {}
+
+    BasicParser &operator=(const BasicParser &other) noexcept
+    {
+        if constexpr (std::allocator_traits<Alloc>::
+                          propagate_on_container_copy_assignment::value) {
+            if (this != std::addressof(other)) {
+                _alloc = other._alloc;
+            }
+        }
+
+        return *this;
+    }
+
+    BasicParser &operator=(BasicParser &&other) noexcept
+    {
+        if constexpr (std::allocator_traits<Alloc>::
+                          propagate_on_container_move_assignment::value) {
+            if (this != std::addressof(other)) {
+                _alloc = std::move(other._alloc);
+            }
+        }
+
+        return *this;
+    }
+
     Alloc get_allocator() noexcept
     {
         return _alloc;
@@ -2764,6 +2819,22 @@ public:
     parse(R &&r, const Alloc &alloc)
     {
         return parse(std::ranges::begin(r), std::ranges::end(r), alloc);
+    }
+
+    void swap(BasicParser &other) noexcept
+    {
+        using std::swap;
+        if constexpr (std::allocator_traits<
+                          Alloc>::propagate_on_container_swap::value) {
+            swap(_alloc, other._alloc);
+        }
+
+        swap(_opts, other._opts);
+    }
+
+    friend void swap(BasicParser &a, BasicParser &b) noexcept
+    {
+        a.swa(b);
     }
 
 private:
@@ -2807,6 +2878,8 @@ parse(R &&r, const ParseOptions &opts = ParseOptions(),
 template <class Alloc>
 class BasicSerializer {
 public:
+    using allocator_type = Alloc;
+
     BasicSerializer() noexcept(noexcept(Alloc())) : _alloc(), _opts() {}
 
     explicit BasicSerializer(const Alloc &alloc) noexcept
@@ -2817,6 +2890,54 @@ public:
         const SerializeOptions &opts, const Alloc &alloc = Alloc()) noexcept
         : _alloc(alloc), _opts(opts)
     {}
+
+    BasicSerializer(const BasicSerializer &other)
+        : BasicSerializer(
+              other,
+              std::allocator_traits<
+                  Alloc>::select_on_container_copy_construction(other._alloc))
+    {}
+
+    BasicSerializer(const BasicSerializer &other, const Alloc &alloc) noexcept
+        : _alloc(alloc), _opts(other._opts)
+    {}
+
+    BasicSerializer(BasicSerializer &&other) noexcept
+        : _alloc(std::move(other._alloc)), _opts(other._opts)
+    {}
+
+    BasicSerializer(BasicSerializer &&other, const Alloc &alloc) noexcept
+        : _alloc(alloc), _opts(other._opts)
+    {}
+
+    BasicSerializer &operator=(const BasicSerializer &other) noexcept
+    {
+        if constexpr (std::allocator_traits<Alloc>::
+                          propagate_on_container_copy_assignment::value) {
+            if (this != std::addressof(other)) {
+                _alloc = other._alloc;
+            }
+        }
+
+        return *this;
+    }
+
+    BasicSerializer &operator=(BasicSerializer &&other) noexcept
+    {
+        if constexpr (std::allocator_traits<Alloc>::
+                          propagate_on_container_move_assignment::value) {
+            if (this != std::addressof(other)) {
+                _alloc = std::move(other._alloc);
+            }
+        }
+
+        return *this;
+    }
+
+    Alloc get_allocator() const noexcept
+    {
+        return _alloc;
+    }
 
     template <std::output_iterator<char> O>
     O serialize(Null, O out)
@@ -2864,6 +2985,22 @@ public:
     O serialize(const BasicDocument<Alloc> &value, O out)
     {
         return _serialize(value, std::move(out));
+    }
+
+    void swap(BasicSerializer &other) noexcept
+    {
+        using std::swap;
+        if constexpr (std::allocator_traits<
+                          Alloc>::propagate_on_container_swap::value) {
+            swap(_alloc, other._alloc);
+        }
+
+        swap(_opts, other._opts);
+    }
+
+    friend void swap(BasicSerializer &a, BasicSerializer &b) noexcept
+    {
+        a.swa(b);
     }
 
 private:

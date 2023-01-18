@@ -238,21 +238,27 @@ public:
         return *this;
     }
 
-    void assign(Null) noexcept {}
+    Primitive &operator=(Null) noexcept
+    {
+        return *this;
+    }
 
-    void assign(Bool value) noexcept
+    Primitive &operator=(Bool value) noexcept
     {
         _value.bool_value = value;
+        return *this;
     }
 
-    void assign(std::integral auto value) noexcept
+    Primitive &operator=(std::integral auto value) noexcept
     {
         _value.int_value = static_cast<Int>(value);
+        return *this;
     }
 
-    void assign(std::floating_point auto value) noexcept
+    Primitive &operator=(std::floating_point auto value) noexcept
     {
         _value.float_value = static_cast<Float>(value);
+        return *this;
     }
 
     auto get_allocator() const noexcept
@@ -431,15 +437,15 @@ struct ParseHandler {
             break;
         case 't':
             expect_next("true");
-            dest.assign(true);
+            dest = true;
             break;
         case 'f':
             expect_next("false");
-            dest.assign(false);
+            dest = false;
             break;
         case 'n':
             expect_next("null");
-            dest.assign(nullptr);
+            dest = nullptr;
             break;
         default:
             set_unexpected_token();
@@ -621,10 +627,10 @@ struct ParseHandler {
         std::from_chars_result result;
 
         if (is_int) {
-            dest.assign(0);
+            dest = 0;
             result = std::from_chars(first, last, dest.get_int());
         } else {
-            dest.assign(0.0);
+            dest = 0.0;
             result = std::from_chars(first, last, dest.get_float());
         }
 
