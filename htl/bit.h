@@ -1,15 +1,16 @@
 #ifndef HTL_BIT_H_
 #define HTL_BIT_H_
 
-#include <algorithm>
 #include <bit>
+#include <climits>
 #include <concepts>
-#include <ranges>
 #include <span>
 #include <htl/config.h>
 #include <htl/detail/bit.h>
 
 namespace htl {
+
+inline constexpr std::size_t byte_size = CHAR_BIT;
 
 // [bit.byteswap], byteswap (C++23)
 template <std::integral T>
@@ -23,14 +24,10 @@ constexpr T byteswap(T value) noexcept
         return detail::byteswap32(value);
     } else if constexpr (sizeof(T) == 8) {
         return detail::byteswap64(value);
-    } else if (std::is_constant_evaluated()) {
-        auto array = std::bit_cast<std::array<std::byte, sizeof(T)>>(value);
-        std::ranges::reverse(array);
-        return std::bit_cast<T>(value);
+    } else if constexpr (sizeof(T) == 16) {
+        return detail::byteswap128(value);
     } else {
-        auto address = reinterpret_cast<std::byte *>(std::addressof(value));
-        std::ranges::reverse(address, address + sizeof(T));
-        return value;
+        return detail::byteswap_any(value);
     }
 }
 
