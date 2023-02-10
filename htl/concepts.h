@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <ranges>
 #include <tuple>
+#include <type_traits>
 #include <utility>
 #include <htl/detail/concepts.h>
 
