@@ -40,7 +40,6 @@ constexpr std::uint64_t byteswap64(std::uint64_t value) noexcept
 }
 
 template <class T>
-    requires sizeof(T) == 16
 constexpr T byteswap128(T value) noexcept
 {
 #if HTL_HAS_BUILTIN(__builtin_bswap128)
