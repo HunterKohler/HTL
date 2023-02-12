@@ -3,11 +3,13 @@
 #include <htl/compare.h>
 #include <htl/concepts.h>
 #include <htl/config.h>
+#include <htl/contract.h>
 #include <htl/detail/ascii.h>
 #include <htl/detail/bit.h>
 #include <htl/detail/bitmask.h>
 #include <htl/detail/compare.h>
 #include <htl/detail/concepts.h>
+#include <htl/detail/contract.h>
 #include <htl/detail/default_hash.h>
 #include <htl/detail/encoding.h>
 #include <htl/detail/json.h>
