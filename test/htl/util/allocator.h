@@ -3,6 +3,7 @@
 
 #include <memory>
 #include <unordered_map>
+#include <htl/contract.h>
 
 namespace htl::test {
 
@@ -78,8 +79,8 @@ struct IdentityAllocator : IdentityAllocatorBase {
 
         map_type::iterator it = get_map().find(p);
 
-        assert(it != get_map().end());
-        assert(it->second == id);
+        HTL_CONTRACT(it != get_map().end());
+        HTL_CONTRACT(it->second == id);
 
         std::allocator<T>{}.deallocate(p, n);
     }
