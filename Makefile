@@ -19,13 +19,27 @@ GTEST = $(GTEST_LIB) \
 	$(GTEST_INCLUDE) \
 	$(GMOCK_INCLUDE)
 
+GBENCH_REPO = https://github.com/google/benchmark.git
+GBENCH_LIB = ./build/lib/libbenchmark.a
+GBENCH_MAIN_LIB = ./build/lib/libbenchmark_main.a
+GBENCH_INCLUDE = ./build/include/benchmark/benchmark.h
+GBENCH = \
+	$(GBENCH_LIB) \
+	$(GBENCH_MAIN_LIB) \
+	$(GBENCH_INCLUDE)
+
 LIB = ./build/lib/libhtl.a
 LIB_INC = $(shell find htl -type f -name '*.h')
 LIB_SRC = $(sort $(shell find htl -type f -name '*.cpp') htl/htl.cpp)
 LIB_OBJ = $(patsubst %.cpp,build/obj/%.o,$(LIB_SRC))
+
 TEST_SRC = $(shell find test/htl -type f -name '*.cpp')
 TEST_OBJ = $(patsubst %.cpp,build/obj/%.o,$(TEST_SRC))
 TEST_BIN = build/bin/test
+
+BENCHMARK_SRC = $(shell find benchmark/htl -type f -name '*.cpp')
+BENCHMARK_OBJ = $(patsubst %.cpp,build/obj/%.o,$(BENCHMARK_SRC))
+BENCHMARK_BIN = build/bin/benchmark
 
 COVERAGE_DIR = build/coverage
 COVERAGE_INFO = $(COVERAGE_DIR)/test.info
@@ -34,9 +48,17 @@ COVERAGE_INFO = $(COVERAGE_DIR)/test.info
 # -fanalyzer
 # -fverbose-asm
 
-CPPFLAGS += -MP -MD -I./build/include -I.
-CXXFLAGS += \
-	-std=c++20 \
+HTL_DEBUG_CXXFLAGS += -fsanitize=undefined,address -fprofile-arcs \
+	-ftest-coverage -O0 -g
+
+HTL_DEBUG_LDFLAGS += -fsanitize=undefined,address -fprofile-arcs \
+	-ftest-coverage -O0 -g
+
+HTL_OPTIMIZE_CXXFLAGS += -O3
+
+HTL_OPTIMIZE_LDFLAGS +=  -O3
+
+HTL_CXXFLAGS_WARNINGS += \
 	-Wall \
 	-Wextra \
 	-Wcast-align=strict \
@@ -50,11 +72,18 @@ CXXFLAGS += \
 	-Wno-switch \
 	-Wno-implicit-fallthrough
 
-LDFLAGS =
-LDLIBS =
+CPPFLAGS += -MP -MD -I./build/include -I.
+CXXFLAGS += \
+	-std=c++20 \
+	$(HTL_CXXFLAGS_WARNINGS) \
+	$(if $(HTL_DEBUG), $(HTL_DEBUG_CXXFLAGS)) \
+	$(if $(HTL_OPTIMIZE), $(HTL_OPTIMIZE_CXXFLAGS))
 
-CXXFLAGS += -fsanitize=undefined,address -fprofile-arcs -ftest-coverage -O0 -g
-LDFLAGS += -fsanitize=undefined,address -fprofile-arcs -ftest-coverage -O0 -g
+LDFLAGS += \
+	$(if $(HTL_DEBUG), $(HTL_DEBUG_LDFLAGS)) \
+	$(if $(HTL_OPTIMIZE), $(HTL_OPTIMIZE_LDFLAGS))
+
+LDLIBS +=
 
 export CPPFLAGS
 export CXXFLAGS
@@ -91,12 +120,17 @@ test: $(TEST_BIN)
 		--output-directory ./build/coverage/test  \
 		$(COVERAGE_INFO)
 
+benchmark: HTL_DEBUG =
+benchmark: HTL_OPTIMIZE = 1
+benchmark: $(BENCHMARK_BIN)
+	@ $< $(BENCHMARK_FLAGS)
+
 coverage: | test
 
 docs:
 	@ doxygen
 
-deps: $(GTEST)
+deps: $(GTEST) $(GBENCH)
 
 clean:
 	@ $(RM) -r ./build
@@ -109,7 +143,8 @@ htl/htl.cpp: $(LIB_INC)
 	clang-format -i $@
 
 $(GTEST) &:
-	if [[ ! -d build/gtest ]] ; then \
+	if [[ ! -d build/gtest/.git ]] ; then \
+		rm -rf build/gtest; \
 		git clone $(GTEST_REPO) build/gtest; \
 	fi
 	@ mkdir -p build/gtest/build
@@ -120,6 +155,21 @@ $(GTEST) &:
 	@ cp -r build/gtest/googletest/include/gtest build/include/
 	@ cp -r build/gtest/googlemock/include/gmock build/include/
 
+$(GBENCH): CXXFLAGS += -w
+$(GBENCH) &:
+	if [[ ! -d build/benchmark/.git ]] ; then \
+		rm -rf build/benchmark; \
+		git clone $(GBENCH_REPO) build/benchmark; \
+	fi
+	@ mkdir -p build/benchmark/build
+	$(CMAKE) -B build/benchmark/build build/benchmark \
+		-DCMAKE_BUILD_TYPE=Release \
+		-DBENCHMARK_ENABLE_GTEST_TESTS=OFF
+	$(MAKE) -C build/benchmark/build
+	@ mkdir -p build/lib build/include
+	@ cp build/benchmark/build/src/*.a build/lib
+	@ cp -r build/benchmark/include/benchmark build/include
+
 %.o:
 	@ mkdir -p $(@D)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $<
@@ -128,12 +178,19 @@ $(GTEST) &:
 	@ mkdir -p $(@D)
 	$(AR) rcs $@ $^
 
+
 $(LIB): $(LIB_OBJ)
 $(LIB_OBJ) : build/obj/%.o : %.cpp
+
 $(TEST_OBJ) : build/obj/%.o : %.cpp
 $(TEST_OBJ) : $(GTEST_INCLUDE) $(GMOCK_INCLUDE)
-
 $(TEST_BIN): $(LIB_OBJ) $(TEST_OBJ) $(GTEST_LIB)
+	@mkdir -p $(@D)
+	$(CXX) $(LDFLAGS) $(LDLIBS) -o $@ $^
+
+$(BENCHMARK_OBJ) : build/obj/%.o : %.cpp
+$(BENCHMARK_OBJ) : $(GBENCH_INCLUDE)
+$(BENCHMARK_BIN): $(LIB_OBJ) $(BENCHMARK_OBJ) $(GBENCH_LIB)
 	@mkdir -p $(@D)
 	$(CXX) $(LDFLAGS) $(LDLIBS) -o $@ $^
 

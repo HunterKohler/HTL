@@ -21,7 +21,7 @@ AlwaysBreakAfterDefinitionReturnType: None
 AlwaysBreakAfterReturnType: None
 AlwaysBreakBeforeMultilineStrings: false
 AlwaysBreakTemplateDeclarations: Yes
-# AttributeBreakingStyle: Always # clang-format 16
+# BreakAfterAttributes: Always # clang-format 16
 AttributeMacros: []
 # BasedOnStyle:
 BinPackArguments: true
