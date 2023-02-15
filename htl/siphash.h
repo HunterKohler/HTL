@@ -1,6 +1,7 @@
 #ifndef HTL_SIPHASH_H_
 #define HTL_SIPHASH_H_
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <ranges>
