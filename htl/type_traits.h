@@ -17,8 +17,8 @@ template <class T>
 struct is_char : detail::is_char_helper<std::remove_cv_t<T>> {};
 
 /**
- * Identifies if the type `T` is a byte. Namely, `char`, `signed char`,
- * `char8_t`, `std::byte`, or a const-volatile qualified type thereof.
+ * Identifies if the type `T` is a byte. Namely,
+ * `unsigned char`, `std::byte`, or a const-volatile qualified type thereof.
  *
  * @tparam T The target type.
  */
