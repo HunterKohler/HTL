@@ -9,14 +9,15 @@
 namespace htl::detail {
 
 inline constexpr char handle_contract_fmt[] =
-    "%s:%" PRIuLEAST32 ":%" PRIuLEAST32 ": %s: contract violation: (%s)\n";
+    "%s:%" PRIuLEAST32 ":%" PRIuLEAST32 ": %s: %s violation: (%s)\n";
 
 constexpr void handle_contract(
-    bool cond, const char *expr, const std::source_location &src) noexcept
+    bool cond, const char *expr, const char *contract_type,
+    const std::source_location &src) noexcept
 {
     if (!cond) [[unlikely]] {
         std::fprintf(stderr, handle_contract_fmt, src.file_name(), src.line(),
-                     src.column(), src.function_name(), expr);
+                     src.column(), src.function_name(), contract_type, expr);
         std::fflush(stderr);
         std::abort();
     }
