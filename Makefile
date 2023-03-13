@@ -172,7 +172,7 @@ $(GBENCH) &:
 
 %.o:
 	@ mkdir -p $(@D)
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $<
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $^
 
 %.a:
 	@ mkdir -p $(@D)
