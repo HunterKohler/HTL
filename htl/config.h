@@ -96,6 +96,10 @@
 #define HTL_ARCH_ALPHA 1
 #endif
 
+#if !defined(HTL_DEBUG) && defined(NDEBUG)
+#define HTL_DEBUG 1
+#endif
+
 /**
  * HTL namespace
  */
